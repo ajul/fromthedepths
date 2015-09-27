@@ -26,7 +26,8 @@ function InterceptTime(missilePosition, missileSpeed, targetPosition, targetVelo
     relativePosition = targetPosition - missilePosition
     
     -- Time for the target to reach closest approach to the missile's current position. May be negative.
-    closestTime = Vector3.Dot(relativePosition, targetVelocity.normalized) / targetVelocity.magnitude
+    closestTime = -Vector3.Dot(relativePosition, targetVelocity.normalized) / targetVelocity.magnitude
+    -- Distance at closest approach.
     closestApproach = relativePosition + targetVelocity * closestTime
     
     -- Solve quadratic equation.
@@ -54,6 +55,7 @@ function LeadPosition(missile, targetInfo)
     leadFactor = leadFactorMin + leadAlpha * leadFactorRange
     
     t = InterceptTime(missile.Position, missile.Velocity.magnitude, targetInfo.AimPointPosition, targetInfo.Velocity)
+    
     if t >= terminalGuidanceTime then
         t = 0
     else
