@@ -1,0 +1,14 @@
+The idea would be to have a cloud of long-duration LUA interceptors circle your ship and shoot down any incoming missiles that pass by without adjusting their course.
+
+The missile:
+
+* Fins
+* Variable Thruster set to 62.5 thrust
+* 3x Fuel Tank
+* Regulator
+* LUA Receiver
+* Missile Interceptor
+
+4 blocks, so one missile is fired every 8 seconds. Each missile has a duration of 240 seconds, so one Launch Pad can maintain 30 missiles in the air.
+
+Supposedly the Missile Interceptor has a radius of 20 m, for a cross-sectional area of ~1,250 m^(2). If we figure we want to cover a hemisphere of 150 m radius, that's about 150,000 m^(2), which would require 120 missiles, or about 4 launchers, times some factor of safety required.

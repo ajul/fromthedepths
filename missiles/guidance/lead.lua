@@ -47,6 +47,7 @@ function InterceptTime(missilePosition, missileSpeed, targetPosition, targetVelo
 end
 
 function LeadPosition(missile, targetInfo)
+    -- Computes what position to lead the target at.
     -- missile: MissileWarningInfo
     -- target: TargetInfo, TargetPositionInfo, or MissileWarningInfo of the target
     
