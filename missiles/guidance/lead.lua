@@ -19,6 +19,42 @@ detonationRadius = 5
 frameTime = 1/40
 -- If intercept time is above this value, do a pure pursuit.
 terminalGuidanceTime = 15
+-- Lowest height to target before terminal guidance
+minTravelHeight = terminalGuidanceTime * 2
+
+tick = 0
+cleanupPeriod = 40
+
+missileCullTime = 5
+missileCullVelocityAir = 65
+missileCullVelocityWater = 10
+
+missileTargets = {}
+missileTicks = {}
+
+function SelectNewTarget(I, missile)
+    -- Choose a target using modulus
+    numTargets = I:GetNumberOfTargets(mainframeToUse)
+    targetIndex = missile.Id % numTargets
+    targetInfo = I:GetTargetInfo(mainframeToUse, targetIndex)
+    missileTargets[missile.Id] = targetInfo.Id
+    return targetInfo
+end
+
+function SelectTarget(I, t, m, missile)
+    if missileTargets[missile.Id] == nil then
+        return SelectNewTarget(I, missile)
+    end
+        
+    for targetIndex = 0, I:GetNumberOfTargets(mainframeToUse) - 1 do
+        targetInfo = I:GetTargetInfo(mainframeToUse, targetIndex)
+        if targetInfo.Id == missileTargets[missile.Id] then
+            return targetInfo
+        end
+    end
+    
+    return SelectNewTarget(I, missile)
+end
 
 function InterceptTime(missilePosition, missileSpeed, targetPosition, targetVelocity)
     -- Computes the time needed to intercept the target.
@@ -58,7 +94,7 @@ function LeadPosition(missile, targetInfo)
     t = InterceptTime(missile.Position, missile.Velocity.magnitude, targetInfo.AimPointPosition, targetInfo.Velocity)
     
     if t >= terminalGuidanceTime then
-        t = 0
+        return Vector3(targetInfo.AimPointPosition.x, math.max(minTravelHeight, targetInfo.AimPointPosition.y), targetInfo.AimPointPosition.z)
     else
         t = math.max(0, t * leadFactor)
     end
@@ -66,17 +102,41 @@ function LeadPosition(missile, targetInfo)
     return targetInfo.AimPointPosition + targetInfo.Velocity * t
 end
 
+function Cleanup()
+    for k, v in pairs(missileTicks) do
+        if v ~= tick then
+            missileTargets[k] = nil
+            missileTicks[k] = nil
+        end
+    end
+end
+
 function Update(I)
+    tick = tick + 1
     target = I:GetTargetInfo(mainframeToUse, 0)
     for t = 0, I:GetLuaTransceiverCount() - 1 do
         for m = 0, I:GetLuaControlledMissileCount(t) - 1 do
             missile = I:GetLuaControlledMissileInfo(t, m)
-            if Vector3.Distance(missile.Position + missile.Velocity * detonationLookaheadTime, target.AimPointPosition) < detonationRadius then
+            if missile.TimeSinceLaunch > missileCullTime and (missile.Velocity.magnitude < missileCullVelocityWater or (missile.Velocity.magnitude < missileCullVelocityAir and missile.Position.y > 50)) then
                 I:DetonateLuaControlledMissile(t, m)
             else
-                leadPosition = LeadPosition(missile, target)
-                I:SetLuaControlledMissileAimPoint(t, m, leadPosition.x, leadPosition.y, leadPosition.z)
+                target = SelectTarget(I, t, m, missile)
+                if target.Valid then
+                    if Vector3.Distance(missile.Position + missile.Velocity * detonationLookaheadTime, target.AimPointPosition + target.Velocity * detonationLookaheadTime) < detonationRadius then
+                        I:DetonateLuaControlledMissile(t, m)
+                    end
+                    leadPosition = LeadPosition(missile, target)
+                    I:SetLuaControlledMissileAimPoint(t, m, leadPosition.x, leadPosition.y, leadPosition.z)
+                else
+                    I:SetLuaControlledMissileAimPoint(t, m, missile.Position.x, 1000 * missile.Position.y, missile.Position.z)
+                end
+                
+                missileTicks[missile.Id] = tick
             end
         end
+    end
+    
+    if tick % cleanupPeriod == 0 then
+        Cleanup()
     end
 end
