@@ -1,3 +1,5 @@
+-- proximity fuse for interceptors; simply targets the nearest known missile
+
 mainframeIndex = 0
 cullTime = 5
 warningInfos = {}
