@@ -36,7 +36,6 @@ function WarningTime(turret, warning)
     
     turnTime = math.abs(relativeAngle / turretTurnRate)
     
-    -- Time to enter range.
     closeRate = -Vector3.Dot(warning.Velocity, relativePosition.normalized)
     if closeRate < 0 then
         return 60
@@ -70,6 +69,38 @@ function ControlInterceptorTurrets(I)
             if target ~= nil then
                 relativePosition = target.Position - turret.GlobalPosition
                 I:AimWeaponInDirection(weaponIndex, relativePosition.x, relativePosition.y, relativePosition.z, interceptorWeaponSlot)
+                I:FireWeapon(weaponIndex, interceptorWeaponSlot)
+            end
+        end
+    end
+end
+
+function SelectInterceptorTarget(missile)
+    -- selects the nearest known missile
+    minDistance = 1000
+    for warningIndex, warning in ipairs(warnings) do
+        thisDistance = Vector3.Distance(warningInfo.Position, missile.Position) 
+        if thisDistance < minDistance then
+            minDistance = thisDistance
+            resultIndex = warningIndex
+        end
+    end
+    return resultIndex
+end
+
+function ControlInterceptors(I)
+    for transceiverIndex = 0, I:GetLuaTransceiverCount() - 1 do
+        for missileIndex = 0, I:GetLuaControlledMissileCount(transceiverIndex) - 1 do
+            missile = I:GetLuaControlledMissileInfo(transceiverIndex, missileIndex)
+            if I:IsLuaControlledMissileAnInterceptor(transceiverIndex, missileIndex) then
+                if missile.TimeSinceLaunch > interceptorLifetime then
+                    I:DetonateLuaControlledMissile(transceiverIndex, missileIndex)
+                else
+                    targetIndex = SelectInterceptorTarget(missile)
+                    if targetIndex ~= nil then
+                        I:SetLuaControlledMissileInterceptorTarget(transceiverIndex, missileIndex, mainframeIndex, targetIndex)
+                    end
+                end
             end
         end
     end
@@ -79,4 +110,5 @@ function Update(I)
     Info = I
     UpdateWarnings(I)
     ControlInterceptorTurrets(I)
+    ControlInterceptors(I)
 end
