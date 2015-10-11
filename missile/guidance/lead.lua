@@ -61,14 +61,9 @@ function InterceptTime(missilePosition, missileSpeed, targetPosition, targetVelo
     
     relativePosition = targetPosition - missilePosition
     
-    -- Time for the target to reach closest approach to the missile's current position. May be negative.
-    closestTime = -Vector3.Dot(relativePosition, targetVelocity.normalized) / targetVelocity.magnitude
-    -- Distance at closest approach.
-    closestApproach = relativePosition + targetVelocity * closestTime
-    
     -- Solve quadratic equation.
     a = targetVelocity.sqrMagnitude - missileSpeed * missileSpeed
-    b = 2 * closestApproach.magnitude * targetVelocity.magnitude
+    b = 2 * Vector3.Dot(targetVelocity, relativePosition)
     c = relativePosition.sqrMagnitude
     vertex = -b / (2 * a)
     discriminant = vertex*vertex - c / a

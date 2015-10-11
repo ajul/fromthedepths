@@ -1,7 +1,7 @@
 -- proximity fuse for interceptors; simply targets the nearest known missile
 
 mainframeIndex = 0
-cullTime = 5
+cullTime = 5.0
 warningInfos = {}
 
 function UpdateWarnings(I)
@@ -29,13 +29,14 @@ function Update(I)
         for missileIndex = 0, I:GetLuaControlledMissileCount(transceiverIndex) - 1 do
             missileInfo = I:GetLuaControlledMissileInfo(transceiverIndex, missileIndex)
             if I:IsLuaControlledMissileAnInterceptor(transceiverIndex, missileIndex) then
-                targetIndex = SelectInterceptorTarget(missileInfo)
-                if targetIndex ~= nil then
-                    I:SetLuaControlledMissileInterceptorTarget(transceiverIndex, missileIndex, mainframeIndex, targetIndex)
+                if missileInfo.TimeSinceLaunch > cullTime then
+                    I:DetonateLuaControlledMissile(transceiverIndex, missileIndex)
+                else
+                    targetIndex = SelectInterceptorTarget(missileInfo)
+                    if targetIndex ~= nil then
+                        I:SetLuaControlledMissileInterceptorTarget(transceiverIndex, missileIndex, mainframeIndex, targetIndex)
+                    end
                 end
-            end
-            if missileInfo.TimeSinceLaunch > cullTime then
-                I:DetonateLuaControlledMissile(transceiverIndex, missileIndex)
             end
         end
     end

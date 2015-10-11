@@ -116,12 +116,9 @@ function InterceptTime(missilePosition, missileSpeed, target)
     
     local relativePosition = target.Position - missilePosition
     
-    -- Relative position at closest approach.
-    local closestApproach = Vector3.ProjectOnPlane(relativePosition, target.Velocity.normalized)
-    
     -- Solve quadratic equation.
     local a = target.Velocity.sqrMagnitude - missileSpeed * missileSpeed
-    local b = 2 * closestApproach.magnitude * target.Velocity.magnitude
+    local b = 2 * Vector3.Dot(target.Velocity, relativePosition)
     local c = relativePosition.sqrMagnitude
     local vertex = -b / (2 * a)
     local discriminant = vertex*vertex - c / a
