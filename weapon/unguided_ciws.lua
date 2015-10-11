@@ -41,11 +41,11 @@ end
 function ControlInterceptorTurrets()
     -- Aims interceptor turrets and fires missiles if appropriate.
     for weaponIndex = 0, Info:GetWeaponCount() - 1 do
-        turret = Info:GetWeaponInfo(weaponIndex)
+        local turret = Info:GetWeaponInfo(weaponIndex)
         if turret.WeaponType == WEAPON_TYPE_TURRET and turret.WeaponSlot == interceptorWeaponSlot then
             -- aim at soonest target
             -- need lead
-            target = SelectTurretTarget(turret)
+            local target = SelectTurretTarget(turret)
             if target ~= nil then
                 local interceptTime = InterceptTime(turret.GlobalPosition, interceptorSpeed, target)
                 if interceptTime < interceptorRangeTime then
