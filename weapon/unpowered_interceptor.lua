@@ -9,7 +9,6 @@ warnings = {}
 
 WEAPON_TYPE_TURRET = 4
 
-
 function UpdateWarnings(I)
     warnings = {}
     for mainframeIndex = 0, I:GetNumberOfMainframes() - 1 do
@@ -77,9 +76,10 @@ end
 
 function SelectInterceptorTarget(missile)
     -- selects the nearest known missile
+    resultIndex = nil
     minDistance = 1000
     for warningIndex, warning in ipairs(warnings) do
-        thisDistance = Vector3.Distance(warningInfo.Position, missile.Position) 
+        thisDistance = Vector3.Distance(warning.Position, missile.Position) 
         if thisDistance < minDistance then
             minDistance = thisDistance
             resultIndex = warningIndex
