@@ -156,10 +156,12 @@ function SelectInterceptorTarget(missile)
     local resultIndex = nil
     local minDistance = interceptorRadius
     for warningIndex, warning in ipairs(warnings) do
-        local thisDistance = Vector3.Distance(warning.Position, missile.Position) 
-        if thisDistance < minDistance then
-            minDistance = thisDistance
-            resultIndex = warningIndex
+        if warning.Valid then
+            local thisDistance = Vector3.Distance(warning.Position, missile.Position) 
+            if thisDistance < minDistance then
+                minDistance = thisDistance
+                resultIndex = warningIndex
+            end
         end
     end
     return resultIndex
