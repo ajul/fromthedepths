@@ -1,18 +1,22 @@
-loiterAltitude = 100.0
-
--- Maximum seconds of lead to use.
-maximumInterceptPredictionTime = 5.0
-
 -- Detonate interceptors after this time to save resources.
 interceptorLifetime = 15.0
+-- Estimated turn radius of interceptors.
+interceptorTurnRadius = 100.0
 
 -- How far interceptors can destroy missiles.
 interceptorRadius = 20.0
 -- Which mainframe is providing warning info.
 interceptorMainframeIndex = 0
 
+maximumVelocityPredictionTime = 1.0
+
 -- Table of known enemy missiles.
-warnings = {}
+numberOfWarnings = 0
+warningsByIndex = {}
+warningsById = {}
+-- Interceptor targets: interceptor.Id -> target.Id
+previousInterceptorTargets = {}
+currentInterceptorTargets = {}
 -- The I in Update(I).
 Info = nil
 
@@ -20,12 +24,15 @@ interceptorMainframePosition = Vector3()
 
 function UpdateWarnings()
     -- Called first. This updates the warning table. Elements are warningIndex -> warningInfo.
-    warnings = {}
+    warningsByIndex = {}
+    warningsById = {}
     for mainframeIndex = 0, Info:GetNumberOfMainframes() - 1 do
-        local numberOfWarnings = Info:GetNumberOfWarnings(mainframeIndex)
+        numberOfWarnings = Info:GetNumberOfWarnings(mainframeIndex)
         if numberOfWarnings > 0 then
             for warningIndex = 0, numberOfWarnings - 1 do
-                warnings[warningIndex] = Info:GetMissileWarning(mainframeIndex, warningIndex)
+                warning = Info:GetMissileWarning(mainframeIndex, warningIndex)
+                warningsByIndex[warningIndex] = warning
+                warningsById[warning.Id] = warning
             end
             interceptorMainframeIndex = mainframeIndex
             return
@@ -45,8 +52,9 @@ function ControlInterceptors()
                 else
                     Info:SetLuaControlledMissileInterceptorStandardGuidanceOnOff(transceiverIndex, interceptorIndex, false)
                     -- Aim.
-                    local aimPosition = SelectInterceptorAimTarget(transceiver, interceptor)
-                    Info:SetLuaControlledMissileAimPoint(transceiverIndex, interceptorIndex, aimPosition.x, aimPosition.y, aimPosition.z)
+                    local target = SelectInterceptorAimTarget(transceiver, interceptor)
+                    local aimPoint = SelectInterceptorAimPoint(transceiver, interceptor, target)
+                    Info:SetLuaControlledMissileAimPoint(transceiverIndex, interceptorIndex, aimPoint.x, aimPoint.y, aimPoint.z)
                     -- Fuse.
                     local targetIndex = SelectInterceptorFuseTarget(interceptor)
                     if targetIndex ~= nil then
@@ -56,46 +64,36 @@ function ControlInterceptors()
             end
         end
     end
+    
+    previousInterceptorTargets = currentInterceptorTargets
 end
 
 function SelectInterceptorAimTarget(transceiver, interceptor)
-    -- Persistent selection?
     local target = nil
-    local bestScore = -1000
-    for warningIndex, warning in ipairs(warnings) do
-        if warning.Valid then
-            local score = InterceptorTargetScore(interceptor, warning)
-            if score > bestScore then
-                target = warning
-                bestScore = score
-            end
-        end
+    local previousTarget = warningsById[previousInterceptorTargets[interceptor.Id]]
+    if previousTarget then
+        target = previousTarget
+    else
+        -- Select a new target.
+        target = warningsByIndex[interceptor.Id % numberOfWarnings]
     end
     
     if target ~= nil then
-        -- Predict interception.
-        local interceptTime = InterceptTime(transceiver.Position, interceptor.Velocity.magnitude, target)
-        if interceptTime == nil  or interceptTime > maximumInterceptPredictionTime then
-            interceptTime = maximumInterceptPredictionTime
-        end
-        local aimPosition = target.Position + target.Velocity * interceptTime
-        return aimPosition
+        currentInterceptorTargets[interceptor.Id] = target.Id
     end
-    
-    -- Loiter above the launcher.
-    -- Or fly towards origin of enemy missiles?
-    local aimPosition = Vector3(transceiver.Position.x, transceiver.Position.y + loiterAltitude, transceiver.Position.z)
-    
-    return aimPosition
+    return target
 end
 
-function InterceptorTargetScore(interceptor, warning)
-    -- Higher is better.
-    
-    relativePosition = warning.Position - interceptor.Position
-    
-    -- Temporary hax: things we are pointing towards
-    return Vector3.Dot(interceptor.Velocity.normalized, relativePosition.normalized)
+function SelectInterceptorAimPoint(transceiver, interceptor, target)
+    if target == nil then
+        return transceiver.Position + Vector3.up * interceptorTurnRadius
+    else
+        local interceptTime = InterceptTime(interceptor.Position, interceptor.Velocity.magnitude, target)
+        if interceptTime == nil or interceptTime > maximumVelocityPredictionTime then
+            interceptTime = maximumVelocityPredictionTime
+        end
+        return target.Position + target.Velocity * interceptTime
+    end
 end
 
 function InterceptTime(missilePosition, missileSpeed, target)
@@ -123,7 +121,7 @@ function SelectInterceptorFuseTarget(interceptor)
     -- Selects the nearest known missile within destruction radius.
     local resultIndex = nil
     local minDistance = interceptorRadius
-    for warningIndex, warning in ipairs(warnings) do
+    for warningIndex, warning in ipairs(warningsByIndex) do
         if warning.Valid then
             local thisDistance = Vector3.Distance(warning.Position, interceptor.Position) 
             if thisDistance < minDistance then
