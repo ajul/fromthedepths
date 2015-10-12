@@ -133,7 +133,7 @@ function InterceptTime(missilePosition, missileSpeed, target)
 end
 
 function ControlInterceptors(I)
-    -- Controls interceptors. Since they are not powered, this is only fuse and culling.
+    -- Controls interceptors. Since they are not guided, this is only fuse and culling.
     for transceiverIndex = 0, Info:GetLuaTransceiverCount() - 1 do
         for interceptorIndex = 0, Info:GetLuaControlledMissileCount(transceiverIndex) - 1 do
             local interceptor = Info:GetLuaControlledMissileInfo(transceiverIndex, interceptorIndex)
@@ -151,13 +151,13 @@ function ControlInterceptors(I)
     end
 end
 
-function SelectInterceptorTarget(missile)
+function SelectInterceptorTarget(interceptor)
     -- Selects the nearest known missile within destruction radius.
     local resultIndex = nil
     local minDistance = interceptorRadius
     for warningIndex, warning in ipairs(warnings) do
         if warning.Valid then
-            local thisDistance = Vector3.Distance(warning.Position, missile.Position) 
+            local thisDistance = Vector3.Distance(warning.Position, interceptor.Position) 
             if thisDistance < minDistance then
                 minDistance = thisDistance
                 resultIndex = warningIndex
