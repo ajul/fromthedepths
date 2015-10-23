@@ -13,10 +13,10 @@ rollThreshold = 60
 -- The I in Update(I).
 Info = nil
 
--- index -> altitude at last frame
 previousTime = 0
 -- length of the last frame
 frameTime = 1/40
+-- index -> altitude at last frame
 previousAltitudes = {}
 
 function Update(I)
