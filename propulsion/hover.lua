@@ -47,6 +47,7 @@ function ControlDediblades()
             
             if math.abs(pitch) >= pitchThreshold and math.abs(pitch) <= 180 - pitchThreshold then
                 -- try to pitch right side up
+                -- Note that positive pitch is nose-down.
                 if dediblade.LocalPosition.z * pitch < 0 then
                     Info:SetSpinnerContinuousSpeed(dedibladeIndex, 0)
                 else
