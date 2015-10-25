@@ -24,13 +24,14 @@ warnings = {}
 Info = nil
 
 function UpdateWarnings()
-    -- Called first. This updates the warning table. Elements are warningIndex -> warningInfo.
+    -- Called first. This updates the warning table. Elements are warningIndex1 -> warningInfo.
     warnings = {}
     for mainframeIndex = 0, Info:GetNumberOfMainframes() - 1 do
         local numberOfWarnings = Info:GetNumberOfWarnings(mainframeIndex)
         if numberOfWarnings > 0 then
-            for warningIndex = 0, numberOfWarnings - 1 do
-                warnings[warningIndex] = Info:GetMissileWarning(mainframeIndex, warningIndex)
+            for warningIndex0 = 0, numberOfWarnings - 1 do
+                -- add one... dammit Lua
+                warnings[warningIndex0 + 1] = Info:GetMissileWarning(mainframeIndex, warningIndex0)
             end
             interceptorMainframeIndex = mainframeIndex
             return
@@ -53,7 +54,7 @@ function ControlInterceptorTurrets()
                     local aimPosition = target.Position + target.Velocity * interceptTime
                     local relativeAimPosition = aimPosition - turret.GlobalPosition
                     Info:AimWeaponInDirection(weaponIndex, relativeAimPosition.x, relativeAimPosition.y, relativeAimPosition.z, interceptorWeaponSlot)
-                    if TurretAimTime(turret.CurrentDirection, relativeAimPosition) < maximumAimTimeDeviation then
+                    if TurretAimTime(turret.CurrentDirection, relativeAimPosition) < maximumAimTimeDeviation and TurretRangeTime(turret, target) == 0 then
                         Info:FireWeapon(weaponIndex, interceptorWeaponSlot)
                     end
                 else
@@ -81,18 +82,24 @@ function SelectTurretTarget(turret)
     return target
 end
 
-function TurretEngageTime(turret, warning)
-    -- Estimate how long it would take until the turret can fire at the target.
-    
+function TurretRangeTime(turret, warning)
     local relativePosition = warning.Position - turret.GlobalPosition
-    
     -- How long until the target will be in range?
     local closeRate = -Vector3.Dot(warning.Velocity, relativePosition)
     -- Only fire at approaching targets.
     if closeRate <= 0 then
         return nil
     end
-    local rangeTime = math.max(relativePosition.magnitude - interceptorRange, 0) / closeRate
+    return math.max(relativePosition.magnitude - interceptorRange, 0) / closeRate
+end
+
+function TurretEngageTime(turret, warning)
+    -- Estimate how long it would take until the turret can fire at the target.
+    
+    local relativePosition = warning.Position - turret.GlobalPosition
+    
+    -- How long until the target will be in range?
+    local rangeTime = TurretRangeTime(turret, warning) or 60
     
     -- Is the target traveling towards us?
     local targetVelocityAimTime = TurretAimTime(relativePosition.normalized, -warning.Velocity)
@@ -155,12 +162,12 @@ function SelectInterceptorTarget(interceptor)
     -- Selects the nearest known missile within destruction radius.
     local resultIndex = nil
     local minDistance = interceptorRadius
-    for warningIndex, warning in ipairs(warnings) do
+    for warningIndex1, warning in ipairs(warnings) do
         if warning.Valid then
             local thisDistance = Vector3.Distance(warning.Position, interceptor.Position) 
             if thisDistance < minDistance then
                 minDistance = thisDistance
-                resultIndex = warningIndex
+                resultIndex = warningIndex1 - 1
             end
         end
     end
