@@ -1,12 +1,14 @@
+-- Weapon speed for computing lead.
 weaponSpeed = 200
 
 -- Will attempt to aim this proportion of the way towards the target each frame.
+-- Should be below 1.
+-- The closer to 1, the faster it will converge.
 spinGain = 0.9
 
 -- The I in Update(I).
 I = nil
 
-targetingMainframe = 0
 targetPosition = nil
 targetVelocity = nil
 
@@ -22,7 +24,7 @@ end
 function Update(Iarg)
     I = Iarg
     local target = I:GetTargetInfo(targetingMainframe, 0)
-    if target.Valid then
+    if target then
         targetPosition = target.AimPointPosition
         targetVelocity = target.Velocity
     else
@@ -35,6 +37,23 @@ function Update(Iarg)
             AimSpinner(spinnerIndex)
         end
     end
+end
+
+function FindTarget()
+    -- We prefer targets with a score provided by prioritization.
+    -- defaultTarget is the fallback.
+    local defaultTarget = nil
+    for mainframeIndex = 0, I:GetNumberOfMainframes() - 1 do
+        local target = I:GetTargetInfo(mainframeIndex, 0)
+        if target.Valid then
+            if target.Score ~= 0 then
+                return target
+            else
+                defaultTarget = target
+            end
+        end
+    end
+    return defaultTarget
 end
 
 function AimSpinner(spinnerIndex)
