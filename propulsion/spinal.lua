@@ -1,5 +1,6 @@
 minimumAltitude = 200
 minimumVelocityY = -10
+minimumAltitudeTime = 5.0
 
 -- As cosines.
 azimuthTolerance = 0.1
@@ -65,9 +66,6 @@ function UpdateGlobals()
     local z = Vector3.Dot(relativeCenterOfMass, construct.Forward)
     
     construct.LocalCenterOfMass = Vector3(x, y, z)
-    
-    -- Compute target vector.
-    local futureAltitudeError = construct.Position.y + construct.Velocity.y * desiredAltitudeTime - desiredAltitude
 end
 
 function ControlPropulsion()
