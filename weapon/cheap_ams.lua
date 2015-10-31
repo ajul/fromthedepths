@@ -12,9 +12,11 @@ I = nil
 -- Id -> {Index, NumberOfAssignedInterceptors}
 warnings = {}
 
+warningsUpToDate = false
+
 function Update(Iarg)
     I = Iarg
-    UpdateWarnings()
+    warningsUpToDate = false
     TargetInterceptors()
 end
 
@@ -35,6 +37,7 @@ function UpdateWarnings()
                 newWarnings[warningInfo.Id] = warning
             end
             warnings = newWarnings
+            warningsUpToDate = true
             return
         end
     end
@@ -58,6 +61,9 @@ function TargetInterceptors()
 end
 
 function TakeNextInterceptorTarget()
+    if not warningsUpToDate then
+        UpdateWarnings()
+    end
     local fewestInterceptorsAssigned = maximumInterceptorsPerWarning
     local selected = nil
     for warningId, warning in pairs(warnings) do
