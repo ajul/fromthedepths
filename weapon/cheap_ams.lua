@@ -21,7 +21,7 @@ function Update(Iarg)
 end
 
 function UpdateWarnings()
-    -- Called first. This updates the warning table. Elements are warningIndex -> warningInfo.
+    -- Called first. This updates the warning table.
     local newWarnings = {}
     for mainframeIndex = 0, Info:GetNumberOfMainframes() - 1 do
         numberOfWarnings = Info:GetNumberOfWarnings(mainframeIndex)
