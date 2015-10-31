@@ -1,5 +1,5 @@
 -- Weapon speed for computing lead.
-weaponSpeed = 200
+weaponSpeed = 1000
 
 -- Will attempt to aim this proportion of the way towards the target each frame.
 -- Should be below 1.
@@ -23,7 +23,7 @@ end
 
 function Update(Iarg)
     I = Iarg
-    local target = I:GetTargetInfo(targetingMainframe, 0)
+    local target = FindTarget()
     if target then
         targetPosition = target.AimPointPosition
         targetVelocity = target.Velocity
@@ -62,8 +62,13 @@ function AimSpinner(spinnerIndex)
     
     -- todo: lead computation
     local relativeTargetPosition = targetPosition - spinner.Position
-    local interceptTime = InterceptTime(weaponSpeed, relativeTargetPosition, targetVelocity)
-    local aimVector = relativeTargetPosition + targetVelocity * interceptTime
+    local aimVector 
+    if weaponSpeed ~= nil then
+        local interceptTime = InterceptTime(weaponSpeed, relativeTargetPosition, targetVelocity)
+        aimVector = relativeTargetPosition + targetVelocity * interceptTime
+    else
+        aimVector = relativeTargetPosition
+    end
     
     local c = Vector3.Dot(aimVector.normalized, spinner.Forwards.normalized)
     local s = Vector3.Dot(aimVector.normalized, spinnerRight.normalized)
