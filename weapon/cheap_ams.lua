@@ -2,7 +2,7 @@
 
 -- Maximum number of interceptors to assign to each incoming missile.
 -- Interceptors will be assigned evenly up to this number.
-maximumInterceptorsPerWarning = 4
+maximumInterceptorsPerWarning = 2
 
 -- Id of the last interceptor fired from each transceiver.
 lastInterceptorIds = {}
