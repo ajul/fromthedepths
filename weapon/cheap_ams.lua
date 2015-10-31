@@ -48,7 +48,7 @@ function TargetInterceptors()
             if interceptor.Id ~= lastInterceptorIds[transceiverIndex] then
                 local selected = TakeNextInterceptorTarget()
                 if selected ~= nil then
-                    I:Log(string.format("Assigning interceptor id %d to warning index %d", interceptor.Id, selected.Index))
+                    --I:LogToHud(string.format("Assigning interceptor id %d to warning index %d", interceptor.Id, selected.Index))
                     I:SetLuaControlledMissileInterceptorTarget(transceiverIndex, interceptorIndex, warningMainframeIndex, selected.Index)
                     lastInterceptorIds[transceiverIndex] = interceptor.Id
                 end
