@@ -73,7 +73,7 @@ function AimSpinner(spinnerIndex)
     -- Find a target.
     local selectedWarning, _ = SelectWarning(spinner.Position, spinnerWeaponSpeed)
     if selectedWarning ~= nil then
-        local relativeTargetPosition = selectedWarning.Position - spinner.Position + selectedWarning.Velocity * fuseTime
+        local relativeTargetPosition = selectedWarning.Position - spinner.Position + selectedWarning.Velocity * fuseTime + Vector3(0.0, gravityDrop, 0.0)
         -- rotate spinner
         local spinnerRight = QuaternionRightVector(spinner.Rotation)
     
@@ -95,10 +95,10 @@ function AimSpinnerWeapon(turretSpinnerIndex, weaponIndex)
         spinnerWeaponSpeed = weapon.Speed
     end
     if selectedWarning ~= nil then
-        local relativeTargetPosition = selectedWarning.Position - weapon.GlobalPosition + selectedWarning.Velocity * fuseTime
+        local relativeTargetPosition = selectedWarning.Position - weapon.GlobalPosition + selectedWarning.Velocity * fuseTime + Vector3(0.0, gravityDrop, 0.0)
         
         I:AimWeaponInDirectionOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, 
-                                                relativeTargetPosition.x, relativeTargetPosition.y + gravityDrop, relativeTargetPosition.z, 
+                                                relativeTargetPosition.x, relativeTargetPosition.y, relativeTargetPosition.z, 
                                                 ciwsWeaponSlot)
         if shouldFire then
             -- I:LogToHud(selectedRadius)
