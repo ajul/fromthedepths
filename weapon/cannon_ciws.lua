@@ -5,21 +5,27 @@ ciwsWeaponSlot = 5
 -- nil to autodetect.
 spinnerWeaponSpeed = nil
 
--- What radius to consider firing weapon.
--- Should be slightly less than the explosive radius.
-weaponRadius = 8.0
+-- What offset to consider firing weapon, where 0 is (hopefully) a direct hit.
+-- Min offset should be negative and slightly smaller than the explosive radius.
+-- Max offset should be zero or a small number.
+minFireOffset = -8.0
+maxFireOffset = 2.0
+
+-- Length of the barrel.
+barrelLength = 8.0
 
 -- Timed fuse length.
-fuseTime = 1.0
+fuseTime = 1.02
 
 -- Will attempt to aim this proportion of the way towards the target each frame.
 -- Should be below 1.
 -- The closer to 1, the faster it will converge.
 spinGain = 0.9
 
+frameTime = 1/40
+
 g = 9.81
-gravityDrop = 0.5 * fuseTime * fuseTime * g
-frameTime = 1 / 40
+gravityDrop = Vector3(0.0, 0.5 * fuseTime * fuseTime * g, 0.0) 
 
 -- The I in Update(I).
 I = nil
@@ -33,6 +39,7 @@ function UpdateWarnings()
     for mainframeIndex = 0, I:GetNumberOfMainframes() - 1 do
         local numberOfWarnings = I:GetNumberOfWarnings(mainframeIndex)
         if numberOfWarnings > 0 then
+            -- I:Log(tostring(numberOfWarnings))
             for warningIndex0 = 0, numberOfWarnings - 1 do
                 -- add one... dammit Lua
                 warnings[warningIndex0 + 1] = I:GetMissileWarning(mainframeIndex, warningIndex0)
@@ -71,9 +78,9 @@ end
 function AimSpinner(spinnerIndex)
     local spinner = I:GetSpinnerInfo(spinnerIndex)
     -- Find a target.
-    local selectedWarning, _ = SelectWarning(spinner.Position, spinnerWeaponSpeed)
+    local selectedWarning, _ = SelectWarning(spinner.Position, spinnerWeaponSpeed or 200)
     if selectedWarning ~= nil then
-        local relativeTargetPosition = selectedWarning.Position - spinner.Position + selectedWarning.Velocity * fuseTime + Vector3(0.0, gravityDrop, 0.0)
+        local relativeTargetPosition = selectedWarning.Position - spinner.Position + selectedWarning.Velocity * fuseTime + gravityDrop
         -- rotate spinner
         local spinnerRight = QuaternionRightVector(spinner.Rotation)
     
@@ -95,13 +102,12 @@ function AimSpinnerWeapon(turretSpinnerIndex, weaponIndex)
         spinnerWeaponSpeed = weapon.Speed
     end
     if selectedWarning ~= nil then
-        local relativeTargetPosition = selectedWarning.Position - weapon.GlobalPosition + selectedWarning.Velocity * fuseTime + Vector3(0.0, gravityDrop, 0.0)
+        local relativeTargetPosition = selectedWarning.Position - weapon.GlobalPosition + selectedWarning.Velocity * fuseTime + gravityDrop
         
         I:AimWeaponInDirectionOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, 
                                                 relativeTargetPosition.x, relativeTargetPosition.y, relativeTargetPosition.z, 
                                                 ciwsWeaponSlot)
         if shouldFire then
-            -- I:LogToHud(selectedRadius)
             I:FireWeaponOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, ciwsWeaponSlot)
         end
     end
@@ -111,21 +117,23 @@ function SelectWarning(position, weaponSpeed)
     local selectedWarning = nil
     local selectedRadius = 10000
     local shouldFire = false
-    for _, warning in ipairs(warnings) do
+    for warningIndex, warning in ipairs(warnings) do
         local relativePosition = warning.Position - position
         local closeRate = -Vector3.Dot(warning.Velocity, relativePosition.normalized)
+        -- Adjust position for gravity.
+        local adjustedRelativePosition = relativePosition + gravityDrop
         -- How far warning will be after fuseTime, relative to center of intercept window.
-        local interceptRadius = relativePosition.magnitude - fuseTime * (closeRate + weaponSpeed)
-        -- I:Log(string.format("Close in %0.1f seconds, intercept radius %0.1f", closeTime, interceptRadius))
+        local interceptOffset = adjustedRelativePosition.magnitude - fuseTime * (weaponSpeed + closeRate) - barrelLength
+        -- I:Log(string.format("Close in %0.1f seconds, intercept radius %0.1f", closeTime, interceptOffset))
         -- Pick closest missile that is not too late to intercept.
-        if closeRate > 0 and interceptRadius < selectedRadius and interceptRadius > -weaponRadius then
-            if interceptRadius < weaponRadius then
+        -- I:LogToHud(string.format("%d: %0.1f", warningIndex, interceptOffset))
+        if closeRate > 0 and interceptOffset < selectedRadius and interceptOffset > minFireOffset then
+            if interceptOffset < maxFireOffset then
                 shouldFire = true
             end
             selectedWarning = warning
-            selectedRadius = interceptRadius
+            selectedRadius = interceptOffset
         end
     end
-    
     return selectedWarning, shouldFire
 end
