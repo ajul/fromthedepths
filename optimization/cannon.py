@@ -40,10 +40,8 @@ def muzzleVelocity(q):
     return base * (1 + geo(q['gauge']) * muzzle_velocity_per_gauge)
 
 def damage(q):
-    kinetic = 150 + 10 * q['standard_and_motor_barrel']
-    kinetic *= 1 + 0.2 * geo(q['ap'])
-    kinetic *= (3 + geo(q['ap'])) / 10 # estimate AP effect
-    explosive = 10 * geo(q['he']) # radius?
+    ap = (3 + geo(q['ap']))
+    explosive = 10 * geo(q['he']) * ap # radius?
     return explosive
 
 def cost(q):
@@ -63,7 +61,7 @@ start_q = {
     }
 
 max_q = {
-    'standard_and_motor_barrel' : 96,
+    'standard_and_motor_barrel' : 6,
     'gauge' : 1000,
     'he' : 1000,
     'ap' : 1000,
