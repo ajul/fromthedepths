@@ -73,7 +73,6 @@ function UpdateInfo()
             end 
         end
     end
-    
     -- Update acceleration if target is same as previous update.
     if newTarget ~= nil and target ~= nil and newTarget.Id == target.Id then
         local velocityChange = newTarget.Velocity - target.Velocity
@@ -88,7 +87,7 @@ function UpdateInfo()
             lastAccelerationTime = currentTime
             targetAcceleration = velocityChange / accelerationDuration
             
-            I:LogToHud(string.format("Acceleration: %f (for %0.3f s)", targetAcceleration.magnitude, accelerationDuration))
+            --LogBoth(string.format("Acceleration: %f (for %0.3f s)", targetAcceleration.magnitude, accelerationDuration))
         end
         relativeVelocity = target.Velocity - I:GetVelocityVector()
     else
@@ -151,6 +150,7 @@ function ComputeAim(weaponPosition, weaponSpeed)
     return aim, t
 end
 
+-- TODO: Maybe try circular lead prediction.
 function ComputeLead(t)
     -- How much to lead the target by given a time t.
     return relativeVelocity * t + targetAcceleration * (0.5 * t * t)
@@ -167,7 +167,7 @@ function ComputeFlightTime(aim, weaponSpeed)
         local lower = vertex - width
         local upper = vertex + width
         return (lower >= 0 and math.sqrt(lower) + extraLeadTime) or 
-               (upper >= 0 and math.sqrt(upper) + extraLeadTime) or 
+               -- (upper >= 0 and math.sqrt(upper) + extraLeadTime) or 
                nil
     else
         return nil
@@ -179,4 +179,9 @@ function QuaternionRightVector(quaternion)
     local y = 2 * (quaternion.x * quaternion.y + quaternion.z * quaternion.w )
     local z = 2 * (quaternion.x * quaternion.z - quaternion.y * quaternion.w )
     return Vector3(x, y, z)
+end
+
+function LogBoth(s)
+    I:Log(s)
+    I:LogToHud(s)
 end
