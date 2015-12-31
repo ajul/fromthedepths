@@ -1,34 +1,43 @@
 -- Weapon slot to use. Only cannons will be controlled regardless.
 weaponSlot = 1
 
+-- What order polynomial to use. 1 = linear (similar to stock), 2 = quadratic (acceleration)
+predictionOrder = 2
+
 -- Extra time to lead the target by.
-extraLeadTime = 1/40
+extraLeadTime = 2/40
+
+-- How many iterations to refine the aim estimate.
+leadIterations = 16
 
 -- Will attempt to aim this proportion of the way towards the target each frame.
 -- Should be below 1.
 -- The closer to 1, the faster it will converge.
 spinGain = 0.9
 
-leadIterations = 16
-
+-- Gravitational acceleration.
 g = 9.81
 
 -- The I in Update(I).
 I = nil
 
+-- Normal frame duration.
 nominalFrameDuration = 1/40
 
--- Last frame for which there was acceleration.
-lastAccelerationTime = nil
-
-DEFAULT_ACCELERATION_DURATION = 0.5
+-- Time and duration of the current frame.
+frameTime = 0
+frameDuration = 1/40
 
 -- Current target.
 target = nil
-targetAcceleration = Vector3.zero
+
+-- Position, velocity, acceleration... of the current target.
+targetDerivatives = {}
+
+-- Velocity is special because cannon projectiles inherit our velocity.
 relativeVelocity = Vector3.zero
 
--- Weapon speed for computing spinner lead.
+-- Weapon speed for computing spinner lead. Will be overwritten by the actual projectile speed.
 spinnerWeaponSpeed = 600
 
 WEAPON_TYPE_CANNON = 0
@@ -64,6 +73,10 @@ function Update(Iarg)
 end
 
 function UpdateInfo()
+    local newFrameTime = I:GetGameTime()
+    frameDuration = newFrameTime - frameTime
+    frameTime = newFrameTime
+
     local newTarget = nil
     for mainframeIndex = 0, I:GetNumberOfMainframes() - 1 do
         local firstTarget = I:GetTargetInfo(mainframeIndex, 0)
@@ -73,28 +86,22 @@ function UpdateInfo()
             end 
         end
     end
-    -- Update acceleration if target is same as previous update.
-    if newTarget ~= nil and target ~= nil and newTarget.Id == target.Id then
-        local velocityChange = newTarget.Velocity - target.Velocity
-        if velocityChange.magnitude > 0 then
-            local currentTime = I:GetGameTime()
-            local accelerationDuration
-            if lastAccelerationTime ~= nil then 
-                accelerationDuration = currentTime - lastAccelerationTime
-            else
-                accelerationDuration = DEFAULT_ACCELERATION_DURATION
+
+    if newTarget ~= nil then
+        -- compute derivatives
+        local newTargetDerivatives = { newTarget.Position }
+        if (target ~= nil and newTarget.Id == target.Id) then
+            for i = 1, math.min(#newTargetDerivatives, predictionOrder) do
+                newTargetDerivatives[i+1] = (newTargetDerivatives[i] - targetDerivatives[i]) / frameDuration
             end
-            lastAccelerationTime = currentTime
-            targetAcceleration = velocityChange / accelerationDuration
-            
-            --LogBoth(string.format("Acceleration: %f (for %0.3f s)", targetAcceleration.magnitude, accelerationDuration))
         end
-        relativeVelocity = target.Velocity - I:GetVelocityVector()
+        targetDerivatives = newTargetDerivatives
     else
-        lastAccelerationTime = nil
-        targetAcceleration = Vector3.zero
-        relativeVelocity = Vector3.zero
+        -- No target.
+        targetDerivatives = {}
     end
+    
+    relativeVelocity = (targetDerivatives[2] or Vector3.zero) - I:GetVelocityVector()
     
     target = newTarget
 end
@@ -145,15 +152,22 @@ function ComputeAim(weaponPosition, weaponSpeed)
         end
         aim = relativePosition + ComputeLead(t)
     end
-    --I:LogToHud(string.format("Lead time: %0.3f s", t))
-    --I:LogToHud(string.format("Acceleration: %f, frame time %f", targetAcceleration.magnitude, lastFrameTime))
+    -- Add compensation for gravity.
+    aim = aim + Vector3.up * (0.5 * g * t * t)
+    --LogBoth(string.format("Lead time: %0.3f s", t))
+    --LogBoth(string.format("Acceleration: %f, frame time %f", targetAcceleration.magnitude, lastFrameTime))
     return aim, t
 end
 
--- TODO: Maybe try circular lead prediction.
 function ComputeLead(t)
     -- How much to lead the target by given a time t.
-    return relativeVelocity * t + targetAcceleration * (0.5 * t * t)
+    local result = relativeVelocity * t
+    local timeCoefficient = t
+    for i = 3, #targetDerivatives do
+        timeCoefficient = timeCoefficient * t / (i - 1)
+        result = result + targetDerivatives[i] * timeCoefficient
+    end
+    return result
 end
 
 function ComputeFlightTime(aim, weaponSpeed)
