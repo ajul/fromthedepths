@@ -1,8 +1,11 @@
 -- Weapon slot to use. Only cannons will be controlled regardless.
 weaponSlot = 1
 
+-- Restrict the maximum azimuth of spinblock rotation. This is in absolute value degrees.
+maximumAzimuth = 180
+
 -- What order polynomial to use. 1 = linear (similar to stock), 2 = quadratic (acceleration)
-predictionOrder = 2
+predictionOrder = 3
 
 -- Extra time to lead the target by.
 extraLeadTime = 2/40
@@ -27,6 +30,17 @@ nominalFrameDuration = 1/40
 -- Time and duration of the current frame.
 frameTime = 0
 frameDuration = 1/40
+
+-- Our own position and local frame.
+myPosition = Vector3.zero
+myVectors = {
+    x = Vector3.right,
+    y = Vector3.up,
+    z = Vector3.forward,
+}
+
+-- Used for computing azimuth restrictions. Will be set only once.
+myLocalCenter = nil
 
 -- Current target.
 target = nil
@@ -56,18 +70,11 @@ function Update(Iarg)
                 end
             end
         end
-        
-        for spinnerIndex = 0, I:GetSpinnerCount() - 1 do
-            if not I:IsSpinnerDedicatedHelispinner(spinnerIndex) then
-                AimSpinner(spinnerIndex)
-            end
-        end
-    else
-        -- Stop spinners.
-        for spinnerIndex = 0, I:GetSpinnerCount() - 1 do
-            if not I:IsSpinnerDedicatedHelispinner(spinnerIndex) then
-                I:SetSpinnerContinuousSpeed(spinnerIndex, 0)
-            end
+    end
+    
+    for spinnerIndex = 0, I:GetSpinnerCount() - 1 do
+        if not I:IsSpinnerDedicatedHelispinner(spinnerIndex) then
+            AimSpinner(spinnerIndex)
         end
     end
 end
@@ -76,13 +83,27 @@ function UpdateInfo()
     local newFrameTime = I:GetGameTime()
     frameDuration = newFrameTime - frameTime
     frameTime = newFrameTime
+    
+    myPosition = I:GetConstructPosition()
+    myVectors.x = I:GetConstructRightVector()
+    myVectors.y = I:GetConstructUpVector()
+    myVectors.z = I:GetConstructForwardVector()
+    
+    if myLocalCenter == nil then
+        -- myLocalCenter = ComputeLocalPosition(I:GetConstructCenterOfMass())
+        myLocalCenter = (I:GetConstructMaxDimensions() + I:GetConstructMinDimensions()) / 2
+        -- LogBoth(string.format('Nominal local center: %s', tostring(myLocalCenter)))
+    end
 
+    -- Find a target. Prefer AIs with scores, and take the last AI otherwise.
     local newTarget = nil
+    local targetingMainframeIndex = nil
     for mainframeIndex = 0, I:GetNumberOfMainframes() - 1 do
         local firstTarget = I:GetTargetInfo(mainframeIndex, 0)
         if firstTarget.Valid then
             if newTarget == nil or firstTarget.Score ~= 0 then
                 newTarget = firstTarget
+                targetingMainframeIndex = mainframeIndex
             end 
         end
     end
@@ -108,23 +129,51 @@ end
 
 function AimSpinner(spinnerIndex)
     local spinner = I:GetSpinnerInfo(spinnerIndex)
+    local spinnerRight = QuaternionRightVector(spinner.Rotation)
     local aim, t = ComputeAim(spinner.Position, spinnerWeaponSpeed)
+    -- Project onto spinner plane.
     
-    if t ~= nil then
-        -- rotate spinner
-        local spinnerRight = QuaternionRightVector(spinner.Rotation)
-        local c = Vector3.Dot(aim.normalized, spinner.Forwards.normalized)
-        local s = Vector3.Dot(aim.normalized, spinnerRight.normalized)
-        -- domain is [-pi, pi]
-        local targetAngle = math.atan2(s, c)
-        local spinSpeed = targetAngle * spinGain / nominalFrameDuration
-        I:SetSpinnerContinuousSpeed(spinnerIndex, spinSpeed)
-        
-        return
+    local neutralAim = ComputeSpinnerNeutralAim(spinner)
+    
+    -- LogBoth(string.format('Neutral aim: %s', tostring(neutralAim)))
+    
+    local targetAngle = neutralAngle
+    if aim ~= nil then
+        local spinnerUp = Vector3.Cross(spinner.Forwards, spinnerRight).normalized
+        aim = Vector3.ProjectOnPlane(aim, spinnerUp)
+        if ComputeAngleDegrees(aim, neutralAim) > maximumAzimuth then
+            aim = neutralAim
+        end
+    else
+        -- Return to neutral if no target.
+        aim = neutralAim
     end
     
-    -- Fallback: stop the spinner.
-    I:SetSpinnerContinuousSpeed(spinnerIndex, 0)
+    local targetAngle = ComputeAzimuth(aim, spinner.Forwards, spinnerRight)
+    local spinSpeed = targetAngle * spinGain / nominalFrameDuration
+    I:SetSpinnerContinuousSpeed(spinnerIndex, spinSpeed)
+end
+
+-- Computes the spinner's neutral aim.
+function ComputeSpinnerNeutralAim(spinner)
+    local centerPosition = spinner.LocalPosition - (myLocalCenter or Vector3.zero)
+    
+    if math.abs(centerPosition.z) + 0.25 > math.abs(centerPosition.x) then
+        return (centerPosition.z >= 0 and myVectors.z) or -myVectors.z
+    else
+        return (centerPosition.x >= 0 and myVectors.x) or -myVectors.x
+    end
+end
+
+function ComputeAngleDegrees(v0, v1)
+    return math.deg(math.acos(Vector3.Dot(v0.normalized, v1.normalized)))
+end
+
+function ComputeAzimuth(aim, forward, right)
+    local c = Vector3.Dot(aim.normalized, forward.normalized)
+    local s = Vector3.Dot(aim.normalized, right.normalized)
+    -- domain is [-pi, pi]
+    return math.atan2(s, c)
 end
 
 function AimSpinnerWeapon(turretSpinnerIndex, weaponIndex)
@@ -142,6 +191,10 @@ end
 
 function ComputeAim(weaponPosition, weaponSpeed)
     -- return aim (relative position to aim at) and flight time
+    if target == nil then
+        return nil, nil
+    end
+    
     local relativePosition = target.AimPointPosition - weaponPosition
     local t = 0
     local aim = relativePosition
@@ -186,6 +239,13 @@ function ComputeFlightTime(aim, weaponSpeed)
     else
         return nil
     end
+end
+
+function ComputeLocalPosition(position)
+    local relativePosition = position - myPosition
+    return Vector3(Vector3.Dot(relativePosition, myVectors.x),
+                   Vector3.Dot(relativePosition, myVectors.y),
+                   Vector3.Dot(relativePosition, myVectors.z))
 end
 
 function QuaternionRightVector(quaternion)
