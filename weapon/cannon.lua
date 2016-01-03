@@ -1,12 +1,16 @@
 -- Weapon slot to use. Only cannons will be controlled regardless.
 weaponSlot = 1
 
--- Restrict the maximum azimuth of spinblock rotation. This is in absolute value degrees.
+-- Restrict the maximum azimuth of spinblock rotation. This is in absolute value degrees relative to the neutral facing.
+-- Neutral facing is determined as if drawing an 'X' on each face of the ship's bounding box and seeing which sector the spinblock falls in.
 maximumAzimuths = {
     x = 180, -- turrets that face right/left at neutral
     y = 180, -- turrets that face up/down at neutral
     z = 180, -- turrets that face forward/back at neutral
 }
+
+-- Don't fire beyond this range.
+maximumRange = 3000
 
 -- What order polynomial to use. 1 = linear (similar to stock), 2 = quadratic (acceleration)
 predictionOrder = 3
@@ -21,6 +25,9 @@ leadIterations = 16
 -- Should be below 1.
 -- The closer to 1, the faster it will converge.
 spinGain = 0.9
+
+-- Limit the spin speed for aesthetic purposes. Radians per second.
+maximumSpinSpeed = 2
 
 -- Gravitational acceleration.
 g = 9.81
@@ -58,8 +65,8 @@ targetDerivatives = {}
 -- Velocity is special because cannon projectiles inherit our velocity.
 relativeVelocity = Vector3.zero
 
--- Weapon speed for computing spinner lead. Will be overwritten by the actual projectile speed.
-spinnerWeaponSpeed = 600
+-- Weapon speed for computing spinner lead. Will be overwritten by the actual projectile speed if higher.
+spinnerWeaponSpeed = 40
 
 WEAPON_TYPE_CANNON = 0
 
@@ -118,6 +125,11 @@ function UpdateInfo()
             end 
         end
     end
+    
+    -- Limit range.
+    if newTarget ~= nil and Vector3.Distance(newTarget.Position, myPosition) > maximumRange then
+        newTarget = nil
+    end
 
     if newTarget ~= nil then
         -- compute derivatives
@@ -151,7 +163,7 @@ function AimSpinner(spinnerIndex)
     local neutralAim, maximumAzimuth
     
     for _, axis in ipairs(AXES) do
-        local thisScore = math.abs((centerPosition[axis] + 0.25) / mySize[axis]) * (1.0 - spinnerUpLocal[axis] * spinnerUpLocal[axis])
+        local thisScore = ((math.abs(centerPosition[axis]) + 0.25) / mySize[axis]) * (1.0 - spinnerUpLocal[axis] * spinnerUpLocal[axis])
         if thisScore >= bestScore then
             neutralAim = (centerPosition[axis] >= 0 and myVectors[axis]) or -myVectors[axis]
             maximumAzimuth = maximumAzimuths[axis]
@@ -176,6 +188,8 @@ function AimSpinner(spinnerIndex)
     
     local targetAngle = ComputeAzimuth(aim, spinner.Forwards, spinnerRight)
     local spinSpeed = targetAngle * spinGain / nominalFrameDuration
+    spinSpeed = math.max(spinSpeed, -maximumSpinSpeed)
+    spinSpeed = math.min(spinSpeed, maximumSpinSpeed)
     I:SetSpinnerContinuousSpeed(spinnerIndex, spinSpeed)
 end
 
@@ -188,7 +202,9 @@ end
 
 function AimSpinnerWeapon(turretSpinnerIndex, weaponIndex)
     local weapon = I:GetWeaponInfoOnTurretOrSpinner(turretSpinnerIndex, weaponIndex)
-    spinnerWeaponSpeed = weapon.Speed
+    if weapon.Speed > spinnerWeaponSpeed then
+        spinnerWeaponSpeed = weapon.Speed
+    end
     local aim, t = ComputeAim(weapon.GlobalPosition, weapon.Speed)
     
     if aim ~= nil then
@@ -242,11 +258,15 @@ function ComputeFlightTime(aim, weaponSpeed)
     if discriminant > 0 then
         local width = math.sqrt(discriminant)
         local lower = vertex - width
-        local upper = vertex + width
-        return (lower >= 0 and math.sqrt(lower) + extraLeadTime) or 
-               -- (upper >= 0 and math.sqrt(upper) + extraLeadTime) or 
-               nil
+        -- local upper = vertex + width
+        if lower >= 0 then
+            return math.sqrt(lower) + extraLeadTime
+        else
+            -- LogBoth("Out of range!")
+            return nil
+        end
     else
+        -- LogBoth(string.format("Out of range! Weapon speed: %f", spinnerWeaponSpeed))
         return nil
     end
 end
