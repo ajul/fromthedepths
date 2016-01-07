@@ -4,16 +4,19 @@ weaponSlot = 1
 -- Restrict the maximum azimuth of spinblock rotation. This is in absolute value degrees relative to the neutral facing.
 -- Neutral facing is determined as if drawing an 'X' on each face of the ship's bounding box and seeing which sector the spinblock falls in.
 maximumAzimuths = {
-    x = 180, -- turrets that face right/left at neutral
-    y = 180, -- turrets that face up/down at neutral
-    z = 180, -- turrets that face forward/back at neutral
+    x = 135, -- turrets that face right/left at neutral
+    y = 135, -- turrets that face up/down at neutral
+    z = 135, -- turrets that face forward/back at neutral
 }
+
+-- Require this much accuracy before firing.
+maximumInaccuracy = 0.25
 
 -- Don't fire beyond this range.
 maximumRange = 3000
 
 -- What order polynomial to use. 1 = linear (similar to stock), 2 = quadratic (acceleration)
-predictionOrder = 3
+predictionOrder = 1
 
 -- Extra time to lead the target by.
 extraLeadTime = 2/40
@@ -44,6 +47,7 @@ frameDuration = 1/40
 
 -- Our own position and local frame.
 myPosition = Vector3.zero
+myAngularVelocity = Vector3.zero
 myVectors = {
     x = Vector3.right,
     y = Vector3.up,
@@ -101,6 +105,7 @@ function UpdateInfo()
     frameTime = newFrameTime
     
     myPosition = I:GetConstructPosition()
+    myAngularVelocity = I:GetAngularVelocity()
     myVectors.x = I:GetConstructRightVector()
     myVectors.y = I:GetConstructUpVector()
     myVectors.z = I:GetConstructForwardVector()
@@ -208,10 +213,25 @@ function AimSpinnerWeapon(turretSpinnerIndex, weaponIndex)
     local aim, t = ComputeAim(weapon.GlobalPosition, weapon.Speed)
     
     if aim ~= nil then
-        I:AimWeaponInDirectionOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, 
-                                                aim.x, aim.y, aim.z, 
-                                                weaponSlot)
-        I:FireWeaponOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, weaponSlot)
+        local inaccuracy = ComputeAngleDegrees(weapon.CurrentDirection, aim)
+        if inaccuracy <= maximumInaccuracy then
+            I:AimWeaponInDirectionOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, 
+                                                     aim.x, aim.y, aim.z, 
+                                                     weaponSlot)
+            local fired = I:FireWeaponOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, weaponSlot)
+            if fired then
+                LogBoth(string.format("Fired with inaccuracy: %0.2f", inaccuracy))
+                --LogBoth(string.format("Lead vector: %s", ComputeLead(t))) 
+            end
+        else
+            -- Aim toward the *next* frame.
+            aim = aim - Vector3.Cross(aim, myAngularVelocity) * frameDuration
+            I:AimWeaponInDirectionOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, 
+                                                    aim.x, aim.y, aim.z, 
+                                                    weaponSlot)
+        end
+        
+        
     end
 end
 
