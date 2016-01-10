@@ -23,12 +23,12 @@ end
 function UpdateWarnings()
     -- Called first. This updates the warning table.
     local newWarnings = {}
-    for mainframeIndex = 0, Info:GetNumberOfMainframes() - 1 do
-        numberOfWarnings = Info:GetNumberOfWarnings(mainframeIndex)
+    for mainframeIndex = 0, I:GetNumberOfMainframes() - 1 do
+        numberOfWarnings = I:GetNumberOfWarnings(mainframeIndex)
         if numberOfWarnings > 0 then
             warningMainframeIndex = mainframeIndex
             for warningIndex = 0, numberOfWarnings - 1 do
-                warningInfo = Info:GetMissileWarning(mainframeIndex, warningIndex)
+                warningInfo = I:GetMissileWarning(mainframeIndex, warningIndex)
                 previousWarning = warnings[warningInfo.Id]
                 warning = {
                     Index = warningIndex,
