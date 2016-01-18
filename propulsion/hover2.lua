@@ -2,10 +2,13 @@
 desiredASL = 10
 desiredAGL = 50
 
+desiredPitch = 0
+desiredRoll = 0
+
 minimumMomentArm = 0.25
 
 altitudePID = {
-    P = 5, -- Metres. The difference at which 100% throttle is applied. Lower = stiffer.
+    P = 2, -- Metres. The difference at which 100% throttle is applied. Lower = stiffer.
     I = 0.5, -- Seconds. Offset is a moving exponential average with this time constant. Lower = more aggressive.
     D = 1, -- Seconds. Will attempt to reach the target point in this time. Higher = more damping.
     
@@ -64,7 +67,6 @@ rollThrottleOffset = 0
 rollThrottle = 0
 
 firstRun = true
-previousState = nil
 state = nil
 
 AXES = {'x', 'y', 'z'}
@@ -111,8 +113,6 @@ function UpdateInfo()
 end
 
 function ChooseState()
-    previousState = state
-    previousThrottle = throttle
     if firstRun then
         firstRun = false
         state = StateInit
@@ -124,12 +124,12 @@ function ChooseState()
         UpdatePID(altitudePID, desiredAltitude, currentAltitude, myVelocity.y, 1)
         
         local maxMV = 1 - math.abs(altitudePID.MV)
-        UpdatePID(pitchPID, 0, myPitch, math.deg(myLocalAngularVelocity.x), maxMV)
+        UpdatePID(pitchPID, desiredPitch, myPitch, math.deg(myLocalAngularVelocity.x), maxMV)
         
         maxMV = maxMV - math.abs(pitchPID.MV)
         
         local pitchCos = math.cos(math.rad(myPitch))
-        UpdatePID(rollPID, 0, myRoll * pitchCos, math.deg(myLocalAngularVelocity.z) * pitchCos, maxMV)
+        UpdatePID(rollPID, desiredRoll, myRoll * pitchCos, math.deg(myLocalAngularVelocity.z) * pitchCos, maxMV)
         
         -- LogBoth(string.format("Pitch: %0.2f, Roll: %0.2f", myPitch, myRoll))
         -- LogBoth(string.format("Lowest offset: %0.2f", GetLowestPointOffset()))
