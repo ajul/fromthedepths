@@ -2,6 +2,8 @@
 desiredASL = 10
 desiredAGL = 50
 
+minimumMomentArm = 0.25
+
 altitudePID = {
     P = 5, -- Metres. The difference at which 100% throttle is applied. Lower = stiffer.
     I = 0.5, -- Seconds. Offset is a moving exponential average with this time constant. Lower = more aggressive.
@@ -36,6 +38,9 @@ myVectors = {
     x = Vector3.right,
     y = Vector3.up,
     z = Vector3.forward,
+    
+    horizontalZ = Vector3.forward,
+    horizontalX = Vector3.right,
 }
 myPosition = Vector3.zero
 myCom = Vector3.zero
@@ -85,6 +90,9 @@ function UpdateInfo()
     myVectors.y = I:GetConstructUpVector()
     myVectors.z = I:GetConstructForwardVector()
     
+    myVectors.horizontalZ = Vector3(myVectors.z.x, 0, myVectors.z.z).normalized
+    myVectors.horizontalX = Vector3.Cross(Vector3.up, myVectors.horizontalZ).normalized
+    
     myPosition = I:GetConstructPosition()
     myCom = I:GetConstructCenterOfMass()
     myLocalCom = ComputeLocalVector(myCom - myPosition)
@@ -123,6 +131,8 @@ function ChooseState()
         local pitchCos = math.cos(math.rad(myPitch))
         UpdatePID(rollPID, 0, myRoll * pitchCos, math.deg(myLocalAngularVelocity.z) * pitchCos, maxMV)
         
+        -- LogBoth(string.format("Pitch: %0.2f, Roll: %0.2f", myPitch, myRoll))
+        -- LogBoth(string.format("Lowest offset: %0.2f", GetLowestPointOffset()))
         -- LogBoth(string.format("Altitude: PV %0.2f, MV %0.2f, EMA %0.2f", currentAltitude, altitudePID.MV, altitudePID.EMA))
         -- LogBoth(string.format("MVs: %0.2f, %0.2f, %0.2f", altitudePID.MV, pitchPID.MV, rollPID.MV))
         
@@ -140,7 +150,7 @@ function GetLowestPointOffset()
         if axisSin > 0 then
             result = result + myMinDimensions[axis] * axisSin
         else
-            result = result - myMaxDimensions[axis] * axisSin
+            result = result + myMaxDimensions[axis] * axisSin
         end
     end
     return result
@@ -160,11 +170,19 @@ end
 
 function StateMain(spinnerIndex)
     local spinner = I:GetSpinnerInfo(spinnerIndex)
-    local spinnerComPosition = spinner.LocalPosition - myLocalCom
-    local quadrantX, quadrantZ = QuadrantXZ(spinnerComPosition)
+    local pitchQuadrant, rollQuadrant = ComQuadrantPitchRoll(spinner.Position)
     
-    local spinnerTotalThrottle = altitudePID.MV - pitchPID.MV * quadrantZ + rollPID.MV * quadrantX
+    local spinnerTotalThrottle = altitudePID.MV - pitchPID.MV * pitchQuadrant + rollPID.MV * rollQuadrant
     I:SetSpinnerContinuousSpeed(spinnerIndex, spinnerTotalThrottle * 30)
+end
+
+function ComQuadrantPitchRoll(position)
+    local comPosition = position - myCom
+    local rollOffset = Vector3.Dot(comPosition, myVectors.horizontalX)
+    local pitchOffset = Vector3.Dot(comPosition, myVectors.horizontalZ)
+    local rollQuadrant = (rollOffset < -minimumMomentArm and -1) or (rollOffset > minimumMomentArm and 1) or 0
+    local pitchQuadrant = (pitchOffset < -minimumMomentArm and -1) or (pitchOffset > minimumMomentArm and 1) or 0
+    return pitchQuadrant, rollQuadrant
 end
 
 -- Utility functions.
@@ -185,12 +203,6 @@ end
 
 function Clip01(x)
     return math.min(math.max(x, 0), 1)
-end
-
-function QuadrantXZ(v)
-    local x = (v.x < -0.25 and -1) or (v.x > 0.25 and 1) or 0
-    local z = (v.z < -0.25 and -1) or (v.z > 0.25 and 1) or 0
-    return x, z
 end
 
 function QuaternionUpVector(quaternion)
