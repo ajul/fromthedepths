@@ -11,17 +11,19 @@ maxFireDeviation = 5.0
 -- Length of the barrel (m).
 barrelLength = 6.0
 
--- Timed fuse length.
+-- Timed fuse length (s).
 fuseTime = 1
--- Extra time to lead the target.
+-- Extra time (s) to lead the target.
 extraLeadTime = 0.02
 totalLeadTime = fuseTime + extraLeadTime
 
--- How much time to wait before returning to neutral.
+-- How much time (s) to wait before returning to neutral.
 resetTime = 30
 
--- Minimum lateral acceleration to consider warning to be turning in a circle.
-minCircularAcceleration = 2 * maxFireDeviation / totalLeadTime / totalLeadTime
+-- Minimum lateral acceleration (m/s^2) to consider warning to be turning in a circle.
+minCircularAcceleration = 50 -- 2 * maxFireDeviation / totalLeadTime / totalLeadTime
+-- Minimum angle (deg) away from aiming at us to consider warning to be turning in a circle.
+minCircularDeflection = 15
 
 -- Gravity, and drop after the fuse time.
 g = 9.81
@@ -34,10 +36,10 @@ I = nil
 frameTimestamp = 0
 -- Duration of the last frame.
 frameDuration = 1/40
--- Timestamp to reset to neutral
+-- Timestamp to reset to neutral.
 resetTimestamp = resetTime
 
--- Velocity of our construct.
+myPosition = Vector3.zero
 myVelocity = Vector3.zero
 
 -- Table of known enemy missiles. Id -> warning.
@@ -76,12 +78,13 @@ function Update(Iarg)
     end
 end
 
+-- Called first. This updates the warning tables and other info.
 function UpdateInfo()
-    -- Called first. This updates the warning table and other info.
     local newframeTimestamp = I:GetGameTime()
     frameDuration = newframeTimestamp - frameTimestamp
     frameTimestamp = newframeTimestamp
     
+    myPosition = I:GetConstructPosition()
     myVelocity = I:GetVelocityVector()
     
     previousWarnings = warnings
@@ -106,29 +109,35 @@ end
 -- Determines the (global) position to aim at a warning after the fuse time, accounting for movement and gravity.
 function WarningAim(warning)
     local previousWarning = previousWarnings[warning.Id]
-    if previousWarning ~= nil then
-        -- Account for turning. Assume traveling in a circle.
+    -- Decide whether to use circular prediction.
+    if previousWarning ~= nil and not IsComingRightForUs(warning) then
         local acceleration = (warning.Velocity - previousWarning.Velocity) / frameDuration
         local lateralAcceleration = Vector3.ProjectOnPlane(acceleration, warning.Velocity)
         --LogBoth(string.format("Lateral acceleration: %f", lateralAcceleration.magnitude))
         if lateralAcceleration.magnitude > minCircularAcceleration then
-            -- Vector from current position to center of turn
+            -- Vector from current position to center of turn.
             local radius = lateralAcceleration * warning.Velocity.sqrMagnitude / acceleration.sqrMagnitude
             -- LogBoth(string.format("Radius: %s", tostring(radius.magnitude)))
             local center = warning.Position + radius
             local turnAngle = warning.Velocity.magnitude / radius.magnitude * totalLeadTime
             local turnPosition = center - radius * math.cos(turnAngle) + (warning.Velocity.normalized * radius.magnitude) * math.sin(turnAngle)
-            leadPosition = turnPosition - myVelocity * totalLeadTime
+            local leadPosition = turnPosition - myVelocity * totalLeadTime
             local aimPosition = leadPosition + gravityAdjustment
             return aimPosition
         end
     end
+    -- Fallthrough: use linear prediction.
     local relativeVelocity = warning.Velocity - myVelocity
     local leadPosition = warning.Position + relativeVelocity * totalLeadTime
     local aimPosition = leadPosition + gravityAdjustment
     return aimPosition
 end
 
+function IsComingRightForUs(warning)
+    return Vector3.Dot(warning.Velocity.normalized, (myPosition - warning.Position).normalized) > math.cos(math.rad(minCircularDeflection))
+end
+
+-- Aim turret at the nearest warning aim position that isn't below minimum range.
 function AimTurret(weaponIndex, weapon)
     local bestOffset = 10000
     local bestWarningAim = nil
@@ -148,6 +157,7 @@ function AimTurret(weaponIndex, weapon)
     end
 end
 
+-- Fire cannon if any warning is hittable.
 function MaybeFireCannon(turretSpinnerIndex, weaponIndex, weapon)
     local fuseDistance = weapon.Speed * fuseTime
     local fuseDistanceSq = fuseDistance * fuseDistance
