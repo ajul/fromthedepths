@@ -2,8 +2,8 @@
 amsWeaponSlot = 5
 
 -- What offset (m) to consider firing weapon, where 0 is (hopefully) a direct hit.
--- Recommended to set this high enough so every missile gets a few frames.
--- But limit fire rate on the cannon so that the cannon only fires once per missile.
+-- Recommended to set this high enough so every warning gets a few frames in range.
+-- But limit fire rate on the cannon so that the cannon only fires once per warning.
 minFireOffset = -5.0
 maxFireOffset = 5.0
 maxFireDeviation = 5.0
@@ -17,6 +17,11 @@ fuseTime = 1
 -- Extra time to lead the target.
 extraLeadTime = 0.02
 
+totalLeadTime = fuseTime + extraLeadTime
+
+-- Minimum lateral acceleration to consider warning to be turning in a circle.
+minCircularAcceleration = 2 * maxFireDeviation / totalLeadTime / totalLeadTime
+
 -- Gravity, and drop after the fuse time.
 g = 9.81
 gravityAdjustment = Vector3(0.0, 0.5 * fuseTime * fuseTime * g, 0.0) 
@@ -24,7 +29,7 @@ gravityAdjustment = Vector3(0.0, 0.5 * fuseTime * fuseTime * g, 0.0)
 -- The I in Update(I).
 I = nil
 
-frameDuration = 0
+frameDuration = 1/40
 frameTime = 0
 
 -- Velocity of our construct.
@@ -35,7 +40,7 @@ warnings = {}
 -- Table for previous frame. Id -> warning.
 previousWarnings = {}
 
--- Position to aim at each missile. Index -> aim position.
+-- Position to aim at each warning. Index -> aim position.
 warningAims = {}
 
 -- Weapon speed and range for computing turret lead.
@@ -94,13 +99,26 @@ end
 
 -- Determines the (global) position to aim at a warning after the fuse time, accounting for movement and gravity.
 function WarningAim(warning)
-    local relativeVelocity = warning.Velocity - myVelocity
-    local leadPosition = warning.Position + relativeVelocity * (fuseTime + extraLeadTime)
     local previousWarning = previousWarnings[warning.Id]
     if previousWarning ~= nil then
-        -- Account for turning.
-        local acceleration = warning.Velocity - previousWarning.Velocity
+        -- Account for turning. Assume traveling in a circle.
+        local acceleration = (warning.Velocity - previousWarning.Velocity) / frameDuration
+        local lateralAcceleration = Vector3.ProjectOnPlane(acceleration, warning.Velocity)
+        --LogBoth(string.format("Lateral acceleration: %f", lateralAcceleration.magnitude))
+        if lateralAcceleration.magnitude > minCircularAcceleration then
+            -- Vector from current position to center of turn
+            local radius = lateralAcceleration * warning.Velocity.sqrMagnitude / acceleration.sqrMagnitude
+            -- LogBoth(string.format("Radius: %s", tostring(radius.magnitude)))
+            local center = warning.Position + radius
+            local turnAngle = warning.Velocity.magnitude / radius.magnitude * totalLeadTime
+            local turnPosition = center - radius * math.cos(turnAngle) + (warning.Velocity.normalized * radius.magnitude) * math.sin(turnAngle)
+            leadPosition = turnPosition - myVelocity * totalLeadTime
+            local aimPosition = leadPosition + gravityAdjustment
+            return aimPosition
+        end
     end
+    local relativeVelocity = warning.Velocity - myVelocity
+    local leadPosition = warning.Position + relativeVelocity * totalLeadTime
     local aimPosition = leadPosition + gravityAdjustment
     return aimPosition
 end
@@ -141,4 +159,9 @@ function MaybeFireCannon(turretSpinnerIndex, weaponIndex, weapon)
             end
         end
     end
+end
+
+function LogBoth(s)
+    I:Log(s)
+    I:LogToHud(s)
 end
