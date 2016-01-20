@@ -13,11 +13,12 @@ barrelLength = 6.0
 
 -- Timed fuse length.
 fuseTime = 1
-
 -- Extra time to lead the target.
 extraLeadTime = 0.02
-
 totalLeadTime = fuseTime + extraLeadTime
+
+-- How much time to wait before returning to neutral.
+resetTime = 30
 
 -- Minimum lateral acceleration to consider warning to be turning in a circle.
 minCircularAcceleration = 2 * maxFireDeviation / totalLeadTime / totalLeadTime
@@ -29,8 +30,12 @@ gravityAdjustment = Vector3(0.0, 0.5 * fuseTime * fuseTime * g, 0.0)
 -- The I in Update(I).
 I = nil
 
+-- Timestamp of the current frame.
+frameTimestamp = 0
+-- Duration of the last frame.
 frameDuration = 1/40
-frameTime = 0
+-- Timestamp to reset to neutral
+resetTimestamp = resetTime
 
 -- Velocity of our construct.
 myVelocity = Vector3.zero
@@ -73,9 +78,9 @@ end
 
 function UpdateInfo()
     -- Called first. This updates the warning table and other info.
-    local newFrameTime = I:GetGameTime()
-    frameDuration = newFrameTime - frameTime
-    frameTime = newFrameTime
+    local newframeTimestamp = I:GetGameTime()
+    frameDuration = newframeTimestamp - frameTimestamp
+    frameTimestamp = newframeTimestamp
     
     myVelocity = I:GetVelocityVector()
     
@@ -85,6 +90,7 @@ function UpdateInfo()
     for mainframeIndex = 0, I:GetNumberOfMainframes() - 1 do
         local numberOfWarnings = I:GetNumberOfWarnings(mainframeIndex)
         if numberOfWarnings > 0 then
+            resetTimestamp = frameTimestamp + resetTime
             -- I:Log(tostring(numberOfWarnings))
             for warningIndex1 = 1, numberOfWarnings do
                 local warning = I:GetMissileWarning(mainframeIndex, warningIndex1 - 1)
@@ -137,6 +143,8 @@ function AimTurret(weaponIndex, weapon)
     if bestWarningAim ~= nil then
         local aim = bestWarningAim - weapon.GlobalPosition
         I:AimWeaponInDirection(weaponIndex, aim.x, aim.y, aim.z, amsWeaponSlot)
+    elseif frameTimestamp < resetTimestamp then
+        I:AimWeaponInDirection(weaponIndex, weapon.CurrentDirection.x, weapon.CurrentDirection.y, weapon.CurrentDirection.z, amsWeaponSlot)
     end
 end
 
