@@ -1,6 +1,16 @@
 -- Which slot's cannons to use.
 amsWeaponSlot = 5
 
+-- Azimuth limits in degrees. Neutral direction is determined by which quarter the cannon falls in when an "X" is drawn on the bounding box from above.
+-- Note that these apply to aiming and only aiming.
+-- If you want a turret to not even turn behind itself you will need to set the field of fire restriction on the turret itself.
+azimuthLimits = {
+    forward = 180,
+    back = 180,
+    right = 180,
+    left = 180,
+}
+
 -- What offset (m) to consider firing weapon, where 0 is (hopefully) a direct hit.
 -- Recommended to set this high enough so every warning gets a few frames in range.
 -- But limit fire rate on the cannon so that the cannon only fires once per warning.
@@ -41,6 +51,16 @@ resetTimestamp = resetTime
 
 myPosition = Vector3.zero
 myVelocity = Vector3.zero
+myMinDimensions = Vector3.one
+myMaxDimensions = Vector3.one
+myBoxLocalCenter = Vector3.zero
+myBoxSize = Vector3.one
+
+myVectors = {
+    x = Vector3.right,
+    y = Vector3.up,
+    z = Vector3.forward,
+}
 
 -- Table of known enemy missiles. Id -> warning.
 warnings = {}
@@ -64,6 +84,7 @@ function Update(Iarg)
     for weaponIndex = 0, I:GetWeaponCount() - 1 do
         local weapon = I:GetWeaponInfo(weaponIndex)
         if weapon.WeaponType == WEAPON_TYPE_TURRET and weapon.WeaponSlot == amsWeaponSlot then
+            -- LogBoth(string.format("Weapon position %d: %s", weaponIndex, tostring(weapon.LocalPosition)))
             AimTurret(weaponIndex, weapon)
         end
     end
@@ -86,6 +107,16 @@ function UpdateInfo()
     
     myPosition = I:GetConstructPosition()
     myVelocity = I:GetVelocityVector()
+    
+    myVectors.x = I:GetConstructRightVector()
+    myVectors.y = I:GetConstructUpVector()
+    myVectors.z = I:GetConstructForwardVector()
+    
+    local myMinDimensions = I:GetConstructMinDimensions()
+    local myMaxDimensions = I:GetConstructMaxDimensions()
+    
+    myBoxLocalCenter = (myMinDimensions + myMaxDimensions) / 2
+    myBoxSize = myMaxDimensions - myMinDimensions
     
     previousWarnings = warnings
     warnings = {}
@@ -139,22 +170,64 @@ end
 
 -- Aim turret at the nearest warning aim position that isn't below minimum range.
 function AimTurret(weaponIndex, weapon)
+    local neutralAim, azimuthLimitCos = GetNeutralAimInfo(weapon)
+    -- LogBoth(string.format("Neutral aim %d: %s", weaponIndex, tostring(neutralAim)))
     local bestOffset = 10000
-    local bestWarningAim = nil
+    local bestAim = nil
     for _, warningAim in ipairs(warningAims) do
         local offset = Vector3.Distance(weapon.GlobalPosition, warningAim) - barrelLength - turretWeaponRange
         if offset < bestOffset and offset > minFireOffset then
-            bestWarningAim = warningAim
-            bestOffset = offset
+            local aim = warningAim - weapon.GlobalPosition
+            if IsLegalAim(aim, neutralAim, azimuthLimitCos) then
+                bestAim = aim
+                bestOffset = offset
+            end
         end
     end
     
-    if bestWarningAim ~= nil then
-        local aim = bestWarningAim - weapon.GlobalPosition
-        I:AimWeaponInDirection(weaponIndex, aim.x, aim.y, aim.z, amsWeaponSlot)
+    if bestAim ~= nil then
+        I:AimWeaponInDirection(weaponIndex, bestAim.x, bestAim.y, bestAim.z, amsWeaponSlot)
     elseif frameTimestamp < resetTimestamp then
         I:AimWeaponInDirection(weaponIndex, weapon.CurrentDirection.x, weapon.CurrentDirection.y, weapon.CurrentDirection.z, amsWeaponSlot)
+    else
+        I:AimWeaponInDirection(weaponIndex, neutralAim.x, neutralAim.y, neutralAim.z, amsWeaponSlot)
     end
+end
+
+function GetNeutralAimInfo(weapon)
+    -- weapon.LocalPosition doesn't work for turrets.
+    local localPosition = ComputeLocalOffset(weapon.GlobalPosition - myPosition)
+    local boxPosition = localPosition - myBoxLocalCenter
+    -- LogBoth(string.format("Box position: %s", tostring(boxPosition)))
+    local normalizedBoxPositionX = (math.abs(boxPosition.x) + 0.25) / myBoxSize.x
+    local normalizedBoxPositionZ = (math.abs(boxPosition.z) + 0.25) / myBoxSize.z 
+    -- LogBoth(string.format("Normalized box position: %0.1f, %0.1f", normalizedBoxPositionX, normalizedBoxPositionZ))
+    local neutralAim, azimuthLimitCos
+    if normalizedBoxPositionZ > normalizedBoxPositionX then
+        if boxPosition.z < 0 then
+            neutralAim = -myVectors.z
+            azimuthLimitCos = math.cos(azimuthLimits.back)
+        else
+            neutralAim = myVectors.z
+            azimuthLimitCos = math.cos(azimuthLimits.forward)
+        end
+    else
+        if boxPosition.x < 0 then
+            neutralAim = -myVectors.x
+            azimuthLimitCos = math.cos(azimuthLimits.left)
+        else
+            neutralAim = myVectors.x
+            azimuthLimitCos = math.cos(azimuthLimits.right)
+        end
+    end
+    return neutralAim, azimuthLimitCos
+end
+
+-- Do the azimuth limits allow the turret to aim this way?
+function IsLegalAim(aim, neutralAim, azimuthLimitCos)
+    local azimuthAim = Vector3.ProjectOnPlane(aim, myVectors.y)
+    local neutralAimCos = Vector3.Dot(azimuthAim.normalized, neutralAim.normalized)
+    return neutralAimCos >= azimuthLimitCos
 end
 
 -- Fire cannon if any warning is hittable.
@@ -177,6 +250,12 @@ function MaybeFireCannon(turretSpinnerIndex, weaponIndex, weapon)
             end
         end
     end
+end
+
+function ComputeLocalOffset(v)
+    return Vector3(Vector3.Dot(v, myVectors.x),
+                   Vector3.Dot(v, myVectors.y),
+                   Vector3.Dot(v, myVectors.z))
 end
 
 function LogBoth(s)
