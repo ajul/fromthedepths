@@ -47,7 +47,7 @@ frameTimestamp = 0
 -- Duration of the last frame.
 frameDuration = 1/40
 -- Timestamp to reset to neutral.
-resetTimestamp = resetTime
+resetTimestamp = 0
 
 myPosition = Vector3.zero
 myVelocity = Vector3.zero
