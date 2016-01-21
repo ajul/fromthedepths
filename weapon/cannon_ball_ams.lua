@@ -144,7 +144,7 @@ function WarningAim(warning)
     if previousWarning ~= nil and not IsComingRightForUs(warning) then
         local acceleration = (warning.Velocity - previousWarning.Velocity) / frameDuration
         local lateralAcceleration = Vector3.ProjectOnPlane(acceleration, warning.Velocity)
-        --LogBoth(string.format("Lateral acceleration: %f", lateralAcceleration.magnitude))
+        -- LogBoth(string.format("Lateral acceleration: %f", lateralAcceleration.magnitude))
         if lateralAcceleration.magnitude > minCircularAcceleration then
             -- Vector from current position to center of turn.
             local radius = lateralAcceleration * warning.Velocity.sqrMagnitude / acceleration.sqrMagnitude
@@ -179,13 +179,17 @@ function AimTurret(weaponIndex, weapon)
         if offset < bestOffset and offset > minFireOffset then
             local aim = warningAim - weapon.GlobalPosition
             if IsLegalAim(aim, neutralAim, azimuthLimitCos) then
+                -- LogBoth(string.format("Legal: %0.1f", offset))
                 bestAim = aim
                 bestOffset = offset
+            else
+                -- LogBoth(string.format("Illegal: %0.1f", offset))
             end
         end
     end
     
     if bestAim ~= nil then
+        -- LogBoth(string.format("Aim %d: %s", weaponIndex, tostring(bestAim)))
         I:AimWeaponInDirection(weaponIndex, bestAim.x, bestAim.y, bestAim.z, amsWeaponSlot)
     elseif frameTimestamp < resetTimestamp then
         I:AimWeaponInDirection(weaponIndex, weapon.CurrentDirection.x, weapon.CurrentDirection.y, weapon.CurrentDirection.z, amsWeaponSlot)
@@ -206,18 +210,18 @@ function GetNeutralAimInfo(weapon)
     if normalizedBoxPositionZ > normalizedBoxPositionX then
         if boxPosition.z < 0 then
             neutralAim = -myVectors.z
-            azimuthLimitCos = math.cos(azimuthLimits.back)
+            azimuthLimitCos = math.cos(math.rad(azimuthLimits.back))
         else
             neutralAim = myVectors.z
-            azimuthLimitCos = math.cos(azimuthLimits.forward)
+            azimuthLimitCos = math.cos(math.rad(azimuthLimits.forward))
         end
     else
         if boxPosition.x < 0 then
             neutralAim = -myVectors.x
-            azimuthLimitCos = math.cos(azimuthLimits.left)
+            azimuthLimitCos = math.cos(math.rad(azimuthLimits.left))
         else
             neutralAim = myVectors.x
-            azimuthLimitCos = math.cos(azimuthLimits.right)
+            azimuthLimitCos = math.cos(math.rad(azimuthLimits.right))
         end
     end
     return neutralAim, azimuthLimitCos
