@@ -29,6 +29,9 @@ fuseTime = 1
 extraLeadTime = 0.1
 totalLeadTime = fuseTime + extraLeadTime
 
+-- Don't fire another shot at a warning unless this time has passed since the last shot.
+minFireDelayPerWarning = extraLeadTime
+
 -- Minimum lateral acceleration to use circular prediction.
 minCircularAcceleration = 5
 
@@ -40,7 +43,7 @@ gravityAdjustment = Vector3(0.0, 0.5 * fuseTime * fuseTime * g, 0.0)
 I = nil
 
 -- Timestamp of the current frame.
-frameTimestamp = 0
+currentTimestamp = 0
 -- Duration of the last frame.
 frameDuration = 1/40
 
@@ -61,9 +64,13 @@ myVectors = {
 warnings = {}
 -- Table for previous frame. Id -> warning.
 previousWarnings = {}
+-- When next shot may be fired at each warning. Id -> timestamp.
+fireTimestamps = {}
 
 -- Position to aim at each warning. Index -> aim position.
 warningAims = {}
+-- warningAim indexes -> warningIds.
+warningAimsIds = {}
 
 -- Neutral positions of turrets.
 turretNeutrals = {}
@@ -92,9 +99,9 @@ end
 
 -- Called first. This updates the warning tables and other info.
 function UpdateInfo()
-    local newframeTimestamp = I:GetGameTime()
-    frameDuration = newframeTimestamp - frameTimestamp
-    frameTimestamp = newframeTimestamp
+    local newcurrentTimestamp = I:GetGameTime()
+    frameDuration = newcurrentTimestamp - currentTimestamp
+    currentTimestamp = newcurrentTimestamp
     
     myPosition = I:GetConstructPosition()
     myVelocity = I:GetVelocityVector()
@@ -120,10 +127,19 @@ function UpdateInfo()
                 local warning = I:GetMissileWarning(mainframeIndex, warningIndex1 - 1)
                 warnings[warning.Id] = warning
                 warningAims[#warningAims+1] = WarningLinearAim(warning)
+                warningAimsIds[#warningAims] = warning.Id
                 warningAims[#warningAims+1] = WarningCircularAim(warning)
+                warningAimsIds[#warningAims] = warning.Id
             end
             interceptorMainframeIndex = mainframeIndex
             return
+        end
+    end
+    
+    -- Clean up fire times.
+    for id, _ in pairs(fireTimestamps) do
+        if warnings[id] == nil then
+            fireTimestamps[id] = nil
         end
     end
     
@@ -178,16 +194,21 @@ function ControlTurret(weaponIndex, weapon)
     -- LogBoth(string.format("Neutral aim %d: %s", weaponIndex, tostring(neutralAim)))
     local bestOffset = maxTrackOffset
     local bestAim = nil
-    for _, warningAim in ipairs(warningAims) do
+    local bestWarningAimIndex = nil
+    local bestWarningId = nil
+    for warningAimIndex, warningAim in ipairs(warningAims) do
         local offset = Vector3.Distance(weapon.GlobalPosition, warningAim) - fuseDistance
         if offset < bestOffset and offset > minFireOffset then
-            local aim = warningAim - weapon.GlobalPosition
-            if IsLegalAim(aim, turretNeutrals[turretKey]) then
-                -- LogBoth(string.format("Legal: %0.1f", offset))
-                bestAim = aim
-                bestOffset = offset
-            else
-                -- LogBoth(string.format("Illegal: %0.1f", offset))
+            local warningId = warningAimsIds[warningAimIndex]
+            if currentTimestamp > (fireTimestamps[warningId] or 0) then
+                local aim = warningAim - weapon.GlobalPosition
+                if IsLegalAim(aim, turretNeutrals[turretKey]) then
+                    -- LogBoth(string.format("Legal: %0.1f", offset))
+                    bestAim = aim
+                    bestOffset = offset
+                    bestWarningAimIndex = warningAimIndex
+                    bestWarningId = warningId
+                end
             end
         end
     end
@@ -200,7 +221,10 @@ function ControlTurret(weaponIndex, weapon)
             local aimSinSq = 1.0 - aimCos * aimCos
             local aimDeviationSq = aimSinSq * fuseDistance * fuseDistance
             if aimCos > 0 and aimDeviationSq < maxFireDeviation then
-                I:FireWeapon(weaponIndex, amsWeaponSlot)
+                local fired = I:FireWeapon(weaponIndex, amsWeaponSlot)
+                if fired then
+                    fireTimestamps[bestWarningId] = currentTimestamp + minFireDelayPerWarning
+                end
             end
         end
     elseif closestTarget ~= nil then
