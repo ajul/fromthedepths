@@ -29,10 +29,8 @@ totalLeadTime = fuseTime + extraLeadTime
 -- How much time (s) to wait before returning to neutral.
 resetTime = 30
 
--- Minimum lateral acceleration (m/s^2) to consider warning to be turning in a circle.
-minCircularAcceleration = 50 -- 2 * maxFireDeviation / totalLeadTime / totalLeadTime
--- Minimum angle (deg) away from aiming at us to consider warning to be turning in a circle.
-minCircularDeflection = 15
+-- Minimum lateral acceleration to use circular prediction.
+minCircularAcceleration = 5
 
 -- Gravity, and drop after the fuse time.
 g = 9.81
@@ -122,7 +120,8 @@ function UpdateInfo()
             for warningIndex1 = 1, numberOfWarnings do
                 local warning = I:GetMissileWarning(mainframeIndex, warningIndex1 - 1)
                 warnings[warning.Id] = warning
-                warningAims[warningIndex1] = WarningAim(warning)
+                warningAims[#warningAims+1] = WarningLinearAim(warning)
+                warningAims[#warningAims+1] = WarningCircularAim(warning)
             end
             interceptorMainframeIndex = mainframeIndex
             return
@@ -130,35 +129,31 @@ function UpdateInfo()
     end
 end
 
--- Determines the (global) position to aim at a warning after the fuse time, accounting for movement and gravity.
-function WarningAim(warning)
-    local previousWarning = previousWarnings[warning.Id]
-    -- Decide whether to use circular prediction.
-    if previousWarning ~= nil and not IsComingRightForUs(warning) then
-        local acceleration = (warning.Velocity - previousWarning.Velocity) / frameDuration
-        local lateralAcceleration = Vector3.ProjectOnPlane(acceleration, warning.Velocity)
-        -- LogBoth(string.format("Lateral acceleration: %f", lateralAcceleration.magnitude))
-        if lateralAcceleration.magnitude > minCircularAcceleration then
-            -- Vector from current position to center of turn.
-            local radius = lateralAcceleration * warning.Velocity.sqrMagnitude / acceleration.sqrMagnitude
-            -- LogBoth(string.format("Radius: %s", tostring(radius.magnitude)))
-            local center = warning.Position + radius
-            local turnAngle = warning.Velocity.magnitude / radius.magnitude * totalLeadTime
-            local turnPosition = center - radius * math.cos(turnAngle) + (warning.Velocity.normalized * radius.magnitude) * math.sin(turnAngle)
-            local leadPosition = turnPosition - myVelocity * totalLeadTime
-            local aimPosition = leadPosition + gravityAdjustment
-            return aimPosition
-        end
-    end
-    -- Fallthrough: use linear prediction.
+function WarningLinearAim(warning)
     local relativeVelocity = warning.Velocity - myVelocity
     local leadPosition = warning.Position + relativeVelocity * totalLeadTime
     local aimPosition = leadPosition + gravityAdjustment
     return aimPosition
 end
 
-function IsComingRightForUs(warning)
-    return Vector3.Dot(warning.Velocity.normalized, (myPosition - warning.Position).normalized) > math.cos(math.rad(minCircularDeflection))
+function WarningCircularAim(warning)
+    local previousWarning = previousWarnings[warning.Id]
+    if previousWarning == nil then
+        return nil
+    end
+    local acceleration = (warning.Velocity - previousWarning.Velocity) / frameDuration
+    local lateralAcceleration = Vector3.ProjectOnPlane(acceleration, warning.Velocity)
+    if lateralAcceleration.magnitude < minCircularAcceleration then
+        return nil
+    end
+    local radius = lateralAcceleration * warning.Velocity.sqrMagnitude / acceleration.sqrMagnitude
+    -- LogBoth(string.format("Radius: %s", tostring(radius.magnitude)))
+    local center = warning.Position + radius
+    local turnAngle = warning.Velocity.magnitude / radius.magnitude * totalLeadTime
+    local turnPosition = center - radius * math.cos(turnAngle) + (warning.Velocity.normalized * radius.magnitude) * math.sin(turnAngle)
+    local leadPosition = turnPosition - myVelocity * totalLeadTime
+    local aimPosition = leadPosition + gravityAdjustment
+    return aimPosition
 end
 
 -- Aim turret at the nearest warning aim position that isn't below minimum range.
