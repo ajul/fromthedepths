@@ -17,17 +17,17 @@ minFireOffset = -5.0
 maxFireOffset = 5.0
 maxFireDeviation = 5.0
 
+-- Start tracking when missile gets within this distance of the engagement surface.
+maxTrackOffset = 1000
+
 -- Length of the cannon compared to the turret (m).
 cannonLength = 5.0
 
 -- Timed fuse length (s).
 fuseTime = 1
 -- Extra time (s) to lead the target.
-extraLeadTime = 0.02
+extraLeadTime = 0.1
 totalLeadTime = fuseTime + extraLeadTime
-
--- How much time (s) to wait before returning to neutral.
-resetTime = 30
 
 -- Minimum lateral acceleration to use circular prediction.
 minCircularAcceleration = 5
@@ -43,8 +43,6 @@ I = nil
 frameTimestamp = 0
 -- Duration of the last frame.
 frameDuration = 1/40
--- Timestamp to reset to neutral.
-resetTimestamp = 0
 
 myPosition = Vector3.zero
 myVelocity = Vector3.zero
@@ -69,6 +67,8 @@ warningAims = {}
 
 -- Neutral positions of turrets.
 turretNeutrals = {}
+
+closestTarget = nil
 
 -- Distance at which burst happens.
 fuseDistance = weaponSpeed * fuseTime + cannonLength
@@ -115,7 +115,6 @@ function UpdateInfo()
     for mainframeIndex = 0, I:GetNumberOfMainframes() - 1 do
         local numberOfWarnings = I:GetNumberOfWarnings(mainframeIndex)
         if numberOfWarnings > 0 then
-            resetTimestamp = frameTimestamp + resetTime
             -- I:Log(tostring(numberOfWarnings))
             for warningIndex1 = 1, numberOfWarnings do
                 local warning = I:GetMissileWarning(mainframeIndex, warningIndex1 - 1)
@@ -125,6 +124,18 @@ function UpdateInfo()
             end
             interceptorMainframeIndex = mainframeIndex
             return
+        end
+    end
+    
+    closestTarget = nil
+    local closestDistance = 10000
+    
+    for targetIndex = 0, I:GetNumberOfTargets(0) - 1 do
+        local target = I:GetTargetInfo(0, targetIndex)
+        local distance = Vector3.Distance(myPosition, target.Position)
+        if distance < closestDistance then
+            closestTarget = target
+            closestDistance = distance
         end
     end
 end
@@ -165,7 +176,7 @@ function ControlTurret(weaponIndex, weapon)
     end
     
     -- LogBoth(string.format("Neutral aim %d: %s", weaponIndex, tostring(neutralAim)))
-    local bestOffset = 10000
+    local bestOffset = maxTrackOffset
     local bestAim = nil
     for _, warningAim in ipairs(warningAims) do
         local offset = Vector3.Distance(weapon.GlobalPosition, warningAim) - fuseDistance
@@ -192,9 +203,9 @@ function ControlTurret(weaponIndex, weapon)
                 I:FireWeapon(weaponIndex, amsWeaponSlot)
             end
         end
-    elseif frameTimestamp < resetTimestamp then
-        -- TODO: nearest enemy instead?
-        I:AimWeaponInDirection(weaponIndex, weapon.CurrentDirection.x, weapon.CurrentDirection.y, weapon.CurrentDirection.z, amsWeaponSlot)
+    elseif closestTarget ~= nil then
+        local targetAim = closestTarget.Position - weapon.GlobalPosition
+        I:AimWeaponInDirection(weaponIndex, targetAim.x, targetAim.y, targetAim.z, amsWeaponSlot)
     end
 end
 
