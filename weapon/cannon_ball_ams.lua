@@ -1,15 +1,11 @@
 -- Which slot's cannons to use.
 amsWeaponSlot = 5
 
--- Azimuth limits in degrees. Neutral direction is determined by which quarter the cannon falls in when an "X" is drawn on the bounding box from above.
+-- Azimuth limit in degrees. Does not currently apply to turrets which neutrally face up/down.
+-- Neutral direction is the nearest cardinal direction when turret is first detected by the script.
 -- Note that these apply to aiming and only aiming.
 -- If you want a turret to not even turn behind itself you will need to set the field of fire restriction on the turret itself.
-azimuthLimits = {
-    forward = 180,
-    back = 180,
-    right = 180,
-    left = 180,
-}
+azimuthLimitCos = math.cos(math.rad(180))
 
 -- Weapon speed and range for computing turret lead.
 weaponSpeed = 150
@@ -73,11 +69,16 @@ previousWarnings = {}
 -- Position to aim at each warning. Index -> aim position.
 warningAims = {}
 
+-- Neutral positions of turrets.
+turretNeutrals = {}
+
 -- Distance at which burst happens.
 fuseDistance = weaponSpeed * fuseTime + cannonLength
 
 WEAPON_TYPE_CANNON = 0
 WEAPON_TYPE_TURRET = 4
+
+AXES = {'x', 'y', 'z'}
 
 function Update(Iarg)
     I = Iarg
@@ -162,7 +163,12 @@ end
 
 -- Aim turret at the nearest warning aim position that isn't below minimum range.
 function ControlTurret(weaponIndex, weapon)
-    local neutralAim, azimuthLimitCos = GetNeutralAimInfo(weapon)
+    local turretKey = VectorIntegerString(ComputeLocalPosition(weapon.GlobalPosition))
+    if turretNeutrals[turretKey] == nil then
+        turretNeutrals[turretKey] = ComputeLocalCardinalDirection(weapon.CurrentDirection)
+        -- LogBoth(string.format("Weapon %d at position %s with cardinal direction %s %d", weaponIndex, turretKey, turretNeutrals[turretKey].axis, turretNeutrals[turretKey].polarity))
+    end
+    
     -- LogBoth(string.format("Neutral aim %d: %s", weaponIndex, tostring(neutralAim)))
     local bestOffset = 10000
     local bestAim = nil
@@ -170,7 +176,7 @@ function ControlTurret(weaponIndex, weapon)
         local offset = Vector3.Distance(weapon.GlobalPosition, warningAim) - fuseDistance
         if offset < bestOffset and offset > minFireOffset then
             local aim = warningAim - weapon.GlobalPosition
-            if IsLegalAim(aim, neutralAim, azimuthLimitCos) then
+            if IsLegalAim(aim, turretNeutrals[turretKey]) then
                 -- LogBoth(string.format("Legal: %0.1f", offset))
                 bestAim = aim
                 bestOffset = offset
@@ -192,52 +198,55 @@ function ControlTurret(weaponIndex, weapon)
             end
         end
     elseif frameTimestamp < resetTimestamp then
+        -- TODO: nearest enemy instead?
         I:AimWeaponInDirection(weaponIndex, weapon.CurrentDirection.x, weapon.CurrentDirection.y, weapon.CurrentDirection.z, amsWeaponSlot)
-    else
-        I:AimWeaponInDirection(weaponIndex, neutralAim.x, neutralAim.y, neutralAim.z, amsWeaponSlot)
     end
-end
-
-function GetNeutralAimInfo(weapon)
-    -- weapon.LocalPosition doesn't work for turrets.
-    local localPosition = ComputeLocalOffset(weapon.GlobalPosition - myPosition)
-    local boxPosition = localPosition - myBoxLocalCenter
-    -- LogBoth(string.format("Box position: %s", tostring(boxPosition)))
-    local normalizedBoxPositionX = (math.abs(boxPosition.x) + 0.25) / myBoxSize.x
-    local normalizedBoxPositionZ = (math.abs(boxPosition.z) + 0.25) / myBoxSize.z 
-    -- LogBoth(string.format("Normalized box position: %0.1f, %0.1f", normalizedBoxPositionX, normalizedBoxPositionZ))
-    local neutralAim, azimuthLimitCos
-    if normalizedBoxPositionZ > normalizedBoxPositionX then
-        if boxPosition.z < 0 then
-            neutralAim = -myVectors.z
-            azimuthLimitCos = math.cos(math.rad(azimuthLimits.back))
-        else
-            neutralAim = myVectors.z
-            azimuthLimitCos = math.cos(math.rad(azimuthLimits.forward))
-        end
-    else
-        if boxPosition.x < 0 then
-            neutralAim = -myVectors.x
-            azimuthLimitCos = math.cos(math.rad(azimuthLimits.left))
-        else
-            neutralAim = myVectors.x
-            azimuthLimitCos = math.cos(math.rad(azimuthLimits.right))
-        end
-    end
-    return neutralAim, azimuthLimitCos
 end
 
 -- Do the azimuth limits allow the turret to aim this way?
-function IsLegalAim(aim, neutralAim, azimuthLimitCos)
-    local azimuthAim = Vector3.ProjectOnPlane(aim, myVectors.y)
-    local neutralAimCos = Vector3.Dot(azimuthAim.normalized, neutralAim.normalized)
-    return neutralAimCos >= azimuthLimitCos
+function IsLegalAim(aim, turretNeutral)
+    if turretNeutral.axis ~= "y" then
+        local azimuthAim = Vector3.ProjectOnPlane(aim, myVectors.y)
+        local neutralAim = myVectors[turretNeutral.axis] * turretNeutral.polarity
+        local neutralAimCos = Vector3.Dot(azimuthAim.normalized, neutralAim.normalized)
+        return neutralAimCos >= azimuthLimitCos
+    end
+    -- up/down turrets can aim anywhere for now
+    return true
 end
 
-function ComputeLocalOffset(v)
-    return Vector3(Vector3.Dot(v, myVectors.x),
-                   Vector3.Dot(v, myVectors.y),
-                   Vector3.Dot(v, myVectors.z))
+function ComputeLocalCardinalDirection(globalVector)
+    -- Computes the local cardinal direction closest to the global direction.
+    local localVector = ComputeLocalVector(globalVector)
+    local bestScore = 0
+    local bestAxis = nil
+    local polarity = 0
+    for _, axis in ipairs(AXES) do
+        local thisScore = math.abs(localVector[axis])
+        if thisScore >= bestScore then
+            bestAxis = axis
+            polarity = (localVector[axis] < 0 and -1) or 1
+            bestScore = thisScore
+        end
+    end
+    return {
+        axis = bestAxis, 
+        polarity = polarity,
+    }
+end
+
+function ComputeLocalVector(globalVector)
+    return Vector3(Vector3.Dot(globalVector, myVectors.x),
+                   Vector3.Dot(globalVector, myVectors.y),
+                   Vector3.Dot(globalVector, myVectors.z))
+end
+
+
+function ComputeLocalPosition(globalPosition)
+    local relativePosition = globalPosition - myPosition
+    return Vector3(Vector3.Dot(relativePosition, myVectors.x),
+                   Vector3.Dot(relativePosition, myVectors.y),
+                   Vector3.Dot(relativePosition, myVectors.z))
 end
 
 function VectorIntegerString(v)
