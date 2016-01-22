@@ -11,6 +11,9 @@ azimuthLimits = {
     left = 180,
 }
 
+-- Weapon speed and range for computing turret lead.
+weaponSpeed = 150
+
 -- What offset (m) to consider firing weapon, where 0 is (hopefully) a direct hit.
 -- Recommended to set this high enough so every warning gets a few frames in range.
 -- But limit fire rate on the cannon so that the cannon only fires once per warning.
@@ -18,8 +21,8 @@ minFireOffset = -5.0
 maxFireOffset = 5.0
 maxFireDeviation = 5.0
 
--- Length of the barrel (m).
-barrelLength = 6.0
+-- Length of the cannon compared to the turret (m).
+cannonLength = 5.0
 
 -- Timed fuse length (s).
 fuseTime = 1
@@ -70,9 +73,8 @@ previousWarnings = {}
 -- Position to aim at each warning. Index -> aim position.
 warningAims = {}
 
--- Weapon speed and range for computing turret lead.
-turretWeaponSpeed = 150
-turretWeaponRange = 150
+-- Distance at which burst happens.
+fuseDistance = weaponSpeed * fuseTime + cannonLength
 
 WEAPON_TYPE_CANNON = 0
 WEAPON_TYPE_TURRET = 4
@@ -84,17 +86,7 @@ function Update(Iarg)
     for weaponIndex = 0, I:GetWeaponCount() - 1 do
         local weapon = I:GetWeaponInfo(weaponIndex)
         if weapon.WeaponType == WEAPON_TYPE_TURRET and weapon.WeaponSlot == amsWeaponSlot then
-            -- LogBoth(string.format("Weapon position %d: %s", weaponIndex, tostring(weapon.LocalPosition)))
-            AimTurret(weaponIndex, weapon)
-        end
-    end
-
-    for turretSpinnerIndex = 0, I:GetTurretSpinnerCount() - 1 do
-        for weaponIndex = 0, I:GetWeaponCountOnTurretOrSpinner(turretSpinnerIndex) do
-            local weapon = I:GetWeaponInfoOnTurretOrSpinner(turretSpinnerIndex, weaponIndex)
-            if weapon.WeaponType == WEAPON_TYPE_CANNON and weapon.WeaponSlot == amsWeaponSlot then
-                MaybeFireCannon(turretSpinnerIndex, weaponIndex, weapon)
-            end
+            ControlTurret(weaponIndex, weapon)
         end
     end
 end
@@ -169,13 +161,13 @@ function IsComingRightForUs(warning)
 end
 
 -- Aim turret at the nearest warning aim position that isn't below minimum range.
-function AimTurret(weaponIndex, weapon)
+function ControlTurret(weaponIndex, weapon)
     local neutralAim, azimuthLimitCos = GetNeutralAimInfo(weapon)
     -- LogBoth(string.format("Neutral aim %d: %s", weaponIndex, tostring(neutralAim)))
     local bestOffset = 10000
     local bestAim = nil
     for _, warningAim in ipairs(warningAims) do
-        local offset = Vector3.Distance(weapon.GlobalPosition, warningAim) - barrelLength - turretWeaponRange
+        local offset = Vector3.Distance(weapon.GlobalPosition, warningAim) - fuseDistance
         if offset < bestOffset and offset > minFireOffset then
             local aim = warningAim - weapon.GlobalPosition
             if IsLegalAim(aim, neutralAim, azimuthLimitCos) then
@@ -191,6 +183,14 @@ function AimTurret(weaponIndex, weapon)
     if bestAim ~= nil then
         -- LogBoth(string.format("Aim %d: %s", weaponIndex, tostring(bestAim)))
         I:AimWeaponInDirection(weaponIndex, bestAim.x, bestAim.y, bestAim.z, amsWeaponSlot)
+        if bestOffset < maxFireOffset then
+            local aimCos = Vector3.Dot(weapon.CurrentDirection.normalized, bestAim.normalized)
+            local aimSinSq = 1.0 - aimCos * aimCos
+            local aimDeviationSq = aimSinSq * fuseDistance * fuseDistance
+            if aimCos > 0 and aimDeviationSq < maxFireDeviation then
+                I:FireWeapon(weaponIndex, amsWeaponSlot)
+            end
+        end
     elseif frameTimestamp < resetTimestamp then
         I:AimWeaponInDirection(weaponIndex, weapon.CurrentDirection.x, weapon.CurrentDirection.y, weapon.CurrentDirection.z, amsWeaponSlot)
     else
@@ -234,33 +234,19 @@ function IsLegalAim(aim, neutralAim, azimuthLimitCos)
     return neutralAimCos >= azimuthLimitCos
 end
 
--- Fire cannon if any warning is hittable.
-function MaybeFireCannon(turretSpinnerIndex, weaponIndex, weapon)
-    local fuseDistance = weapon.Speed * fuseTime
-    local fuseDistanceSq = fuseDistance * fuseDistance
-    for _, warningAim in ipairs(warningAims) do
-        local aim = warningAim - weapon.GlobalPosition
-        local offset = aim.magnitude - barrelLength - fuseDistance
-        if offset < maxFireOffset and offset > minFireOffset then
-            local aimCos = Vector3.Dot(weapon.CurrentDirection.normalized, aim.normalized)
-            local aimSinSq = 1.0 - aimCos * aimCos
-            local aimDeviationSquared = aimSinSq * fuseDistanceSq
-            if aimCos > 0 and aimDeviationSquared < maxFireDeviation then
-                local aimable = I:AimWeaponInDirectionOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, aim.x, aim.y, aim.z, amsWeaponSlot)
-                if aimable then
-                    I:FireWeaponOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, amsWeaponSlot)
-                    return
-                end
-            end
-        end
-    end
-end
-
 function ComputeLocalOffset(v)
     return Vector3(Vector3.Dot(v, myVectors.x),
                    Vector3.Dot(v, myVectors.y),
                    Vector3.Dot(v, myVectors.z))
 end
+
+function VectorIntegerString(v)
+    return string.format("%d,%d,%d",
+                         math.floor(v.x + 0.5),
+                         math.floor(v.y + 0.5),
+                         math.floor(v.z + 0.5))
+end
+                         
 
 function LogBoth(s)
     I:Log(s)
