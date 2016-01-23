@@ -24,8 +24,11 @@ fuseTime = 1
 extraLeadTime = 0.1
 totalLeadTime = fuseTime + extraLeadTime
 
--- Don't fire another shot at a warning unless this time has passed since the last shot.
-minFireDelayPerWarning = extraLeadTime
+-- Don't fire another burst at a warning unless this time has passed since the start of the last burst.
+-- Set to a negative value to fire as fast as possible.
+minBurstIntervalPerWarning = extraLeadTime
+-- How many shots to fire per burst.
+shotsPerBurst = 1
 
 -- Minimum lateral acceleration to use circular prediction.
 minCircularAcceleration = 5
@@ -62,8 +65,10 @@ myVectors = {
 warnings = {}
 -- Table for previous frame. Id -> warning.
 previousWarnings = {}
--- When next shot may be fired at each warning. Id -> timestamp.
-fireTimestamps = {}
+-- When next burst may be fired at each warning. Id -> timestamp.
+burstTimestamps = {}
+-- Number of shots fired in the current burst against each warning.
+burstCounts = {}
 
 -- Position to aim at each warning. Index -> aim position.
 warningAims = {}
@@ -132,9 +137,10 @@ function UpdateInfo()
     end
     
     -- Clean up fire times.
-    for id, _ in pairs(fireTimestamps) do
+    for id, _ in pairs(burstTimestamps) do
         if warnings[id] == nil then
-            fireTimestamps[id] = nil
+            burstTimestamps[id] = nil
+            burstCounts[id] = nil
         end
     end
     
@@ -197,7 +203,8 @@ function ControlTurret(weaponIndex, weapon)
         local offset = Vector3.Distance(weapon.GlobalPosition, warningAim) - fuseDistance
         if offset < bestOffset and offset > minFireOffset then
             local warningId = warningAimsIds[warningAimIndex]
-            if currentTimestamp > (fireTimestamps[warningId] or 0) then
+            -- Allow fire if burst has recharged, or shots remaining in burst.
+            if currentTimestamp > (burstTimestamps[warningId] or 0) or (burstCounts[warningId] or 0) < shotsPerBurst then
                 local aim = warningAim - weapon.GlobalPosition
                 if IsLegalAim(aim, turretNeutrals[turretKey]) then
                     -- LogBoth(string.format("Legal: %0.1f", offset))
@@ -220,7 +227,14 @@ function ControlTurret(weaponIndex, weapon)
             if aimCos > 0 and aimDeviationSq < maxFireDeviation then
                 local fired = I:FireWeapon(weaponIndex, amsWeaponSlot)
                 if fired then
-                    fireTimestamps[bestWarningId] = currentTimestamp + minFireDelayPerWarning
+                    if currentTimestamp > (burstTimestamps[bestWarningId] or 0) then
+                        -- If recharged, start new burst.
+                        burstTimestamps[bestWarningId] = currentTimestamp + minBurstIntervalPerWarning
+                        burstCounts[bestWarningId] = 1
+                    else
+                        -- Otherwise use up a burst shot.
+                        burstCounts[bestWarningId] = burstCounts[bestWarningId] + 1
+                    end
                 end
             end
         end
