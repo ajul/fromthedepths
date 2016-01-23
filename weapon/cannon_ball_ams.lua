@@ -7,8 +7,8 @@ amsWeaponSlot = 5
 azimuthLimitCos = math.cos(math.rad(180))
 
 -- What offset (m) to consider firing weapon, where 0 is (hopefully) a direct hit.
-minFireOffset = -5.0
-maxFireOffset = 5.0
+minFireOffset = -7.5
+maxFireOffset = 2.5
 -- What lateral deviation (m) is acceptable to fire weapon.
 maxFireLateralDeviation = 5.0
 
@@ -18,15 +18,16 @@ maxTrackOffset = 1000
 -- Length of the cannon compared to the turret (m).
 cannonLength = 5.0
 
--- Timed fuse length (s).
+-- Timed fuse length (s). You may want to add an extra frame.
 fuseTime = 1
+-- Add an extra frame?
+extraFuseFrames = 1
 -- Extra time (s) to lead the target.
-extraLeadTime = 0.1
-totalLeadTime = fuseTime + extraLeadTime
+extraLeadTime = 0.0
 
 -- Don't fire another burst at a warning unless this time has passed since the start of the last burst.
 -- Set to a negative value to fire as fast as possible.
-minBurstIntervalPerWarning = extraLeadTime
+minBurstIntervalPerWarning = fuseTime
 -- How many shots to fire per burst.
 shotsPerBurst = 1
 
@@ -80,6 +81,8 @@ turretNeutrals = {}
 
 closestTarget = nil
 
+totalLeadTime = fuseTime + extraFuseFrames * frameDuration + extraLeadTime 
+
 WEAPON_TYPE_TURRET = 4
 
 -- Dummy weapon speed that the game returns for missiles.
@@ -104,6 +107,8 @@ function UpdateInfo()
     local newTimestamp = I:GetGameTime()
     frameDuration = newTimestamp - currentTimestamp
     currentTimestamp = newTimestamp
+    
+    totalLeadTime = fuseTime + extraFuseFrames * frameDuration + extraLeadTime 
     
     myPosition = I:GetConstructPosition()
     myVelocity = I:GetVelocityVector()
@@ -161,7 +166,16 @@ end
 
 function WarningLinearAim(warning)
     local relativeVelocity = warning.Velocity - myVelocity
+    
     local leadPosition = warning.Position + relativeVelocity * totalLeadTime
+    local previousWarning = previousWarnings[warning.Id]
+    if previousWarning ~= nil then
+        local acceleration = (warning.Velocity - previousWarning.Velocity) / frameDuration
+        local linearAcceleration = Vector3.Project(acceleration, warning.Velocity)
+        
+        -- A little less than full acceleration to account for drag.
+        leadPosition = leadPosition + linearAcceleration * (0.45 * totalLeadTime * totalLeadTime)
+    end
     local aimPosition = leadPosition + gravityAdjustment
     return aimPosition
 end
@@ -190,7 +204,7 @@ end
 function ControlTurret(weaponIndex, weapon)
     local turretKey = VectorIntegerString(ComputeLocalPosition(weapon.GlobalPosition))
     local weaponSpeed = (weapon.Speed > 0 and weapon.Speed) or defaultWeaponSpeed
-    local fuseDistance = weaponSpeed * fuseTime + cannonLength
+    local fuseDistance = weaponSpeed * (fuseTime + extraFuseFrames * frameDuration) + cannonLength
     if turretNeutrals[turretKey] == nil then
         turretNeutrals[turretKey] = ComputeLocalCardinalDirection(weapon.CurrentDirection)
         -- LogBoth(string.format("Weapon %d at position %s with cardinal direction %s %d", weaponIndex, turretKey, turretNeutrals[turretKey].axis, turretNeutrals[turretKey].polarity))
