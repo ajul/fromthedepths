@@ -80,8 +80,10 @@ turretNeutrals = {}
 
 closestTarget = nil
 
-WEAPON_TYPE_CANNON = 0
 WEAPON_TYPE_TURRET = 4
+
+-- Dummy weapon speed that the game returns for missiles.
+MISSILE_WEAPON_SPEED = 100
 
 AXES = {'x', 'y', 'z'}
 
@@ -91,7 +93,7 @@ function Update(Iarg)
     
     for weaponIndex = 0, I:GetWeaponCount() - 1 do
         local weapon = I:GetWeaponInfo(weaponIndex)
-        if weapon.WeaponType == WEAPON_TYPE_TURRET and weapon.WeaponSlot == amsWeaponSlot then
+        if weapon.WeaponType == WEAPON_TYPE_TURRET and weapon.WeaponSlot == amsWeaponSlot and not weapon.Speed == MISSILE_WEAPON_SPEED then
             ControlTurret(weaponIndex, weapon)
         end
     end
