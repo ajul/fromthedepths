@@ -2,7 +2,6 @@
 amsWeaponSlot = 5
 
 -- Azimuth limit in degrees. Does not currently apply to turrets which neutrally face up/down.
--- Neutral direction is the nearest cardinal direction when turret is first detected by the script.
 -- Note that these apply to aiming and only aiming.
 -- If you want a turret to not even turn behind itself you will need to set the field of fire restriction on the turret itself.
 azimuthLimitCos = math.cos(math.rad(180))
@@ -10,7 +9,8 @@ azimuthLimitCos = math.cos(math.rad(180))
 -- What offset (m) to consider firing weapon, where 0 is (hopefully) a direct hit.
 minFireOffset = -5.0
 maxFireOffset = 5.0
-maxFireDeviation = 5.0
+-- What lateral deviation (m) is acceptable to fire weapon.
+maxFireLateralDeviation = 5.0
 
 -- Start tracking when missile gets within this distance of the engagement surface.
 maxTrackOffset = 1000
@@ -93,7 +93,7 @@ function Update(Iarg)
     
     for weaponIndex = 0, I:GetWeaponCount() - 1 do
         local weapon = I:GetWeaponInfo(weaponIndex)
-        if weapon.WeaponType == WEAPON_TYPE_TURRET and weapon.WeaponSlot == amsWeaponSlot and not weapon.Speed == MISSILE_WEAPON_SPEED then
+        if weapon.WeaponType == WEAPON_TYPE_TURRET and weapon.WeaponSlot == amsWeaponSlot and not (weapon.Speed == MISSILE_WEAPON_SPEED) then
             ControlTurret(weaponIndex, weapon)
         end
     end
@@ -101,9 +101,9 @@ end
 
 -- Called first. This updates the warning tables and other info.
 function UpdateInfo()
-    local newcurrentTimestamp = I:GetGameTime()
-    frameDuration = newcurrentTimestamp - currentTimestamp
-    currentTimestamp = newcurrentTimestamp
+    local newTimestamp = I:GetGameTime()
+    frameDuration = newTimestamp - currentTimestamp
+    currentTimestamp = newTimestamp
     
     myPosition = I:GetConstructPosition()
     myVelocity = I:GetVelocityVector()
@@ -133,7 +133,6 @@ function UpdateInfo()
                 warningAims[#warningAims+1] = WarningCircularAim(warning)
                 warningAimsIds[#warningAims] = warning.Id
             end
-            interceptorMainframeIndex = mainframeIndex
             return
         end
     end
@@ -146,6 +145,7 @@ function UpdateInfo()
         end
     end
     
+    -- Compute closest target for aiming at if no missiles are around.
     closestTarget = nil
     local closestDistance = 10000
     
@@ -226,7 +226,7 @@ function ControlTurret(weaponIndex, weapon)
             local aimCos = Vector3.Dot(weapon.CurrentDirection.normalized, bestAim.normalized)
             local aimSinSq = 1.0 - aimCos * aimCos
             local aimDeviationSq = aimSinSq * fuseDistance * fuseDistance
-            if aimCos > 0 and aimDeviationSq < maxFireDeviation then
+            if aimCos > 0 and aimDeviationSq < maxFireLateralDeviation then
                 local fired = I:FireWeapon(weaponIndex, amsWeaponSlot)
                 if fired then
                     if currentTimestamp > (burstTimestamps[bestWarningId] or 0) then
