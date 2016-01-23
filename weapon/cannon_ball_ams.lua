@@ -1,4 +1,4 @@
--- Which slot's cannons to use.
+-- Which slot's turrets/cannons to use (both need to be set).
 amsWeaponSlot = 5
 
 -- Azimuth limit in degrees. Does not currently apply to turrets which neutrally face up/down.
