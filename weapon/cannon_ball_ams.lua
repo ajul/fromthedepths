@@ -7,12 +7,7 @@ amsWeaponSlot = 5
 -- If you want a turret to not even turn behind itself you will need to set the field of fire restriction on the turret itself.
 azimuthLimitCos = math.cos(math.rad(180))
 
--- Weapon speed and range for computing turret lead.
-weaponSpeed = 150
-
 -- What offset (m) to consider firing weapon, where 0 is (hopefully) a direct hit.
--- Recommended to set this high enough so every warning gets a few frames in range.
--- But limit fire rate on the cannon so that the cannon only fires once per warning.
 minFireOffset = -5.0
 maxFireOffset = 5.0
 maxFireDeviation = 5.0
@@ -34,6 +29,9 @@ minFireDelayPerWarning = extraLeadTime
 
 -- Minimum lateral acceleration to use circular prediction.
 minCircularAcceleration = 5
+
+-- Weapon speed and range for computing turret lead when no shell loaded.
+defaultWeaponSpeed = 150
 
 -- Gravity, and drop after the fuse time.
 g = 9.81
@@ -76,9 +74,6 @@ warningAimsIds = {}
 turretNeutrals = {}
 
 closestTarget = nil
-
--- Distance at which burst happens.
-fuseDistance = weaponSpeed * fuseTime + cannonLength
 
 WEAPON_TYPE_CANNON = 0
 WEAPON_TYPE_TURRET = 4
@@ -186,6 +181,8 @@ end
 -- Aim turret at the nearest warning aim position that isn't below minimum range.
 function ControlTurret(weaponIndex, weapon)
     local turretKey = VectorIntegerString(ComputeLocalPosition(weapon.GlobalPosition))
+    local weaponSpeed = (weapon.Speed > 0 and weapon.Speed) or defaultWeaponSpeed
+    local fuseDistance = weaponSpeed * fuseTime + cannonLength
     if turretNeutrals[turretKey] == nil then
         turretNeutrals[turretKey] = ComputeLocalCardinalDirection(weapon.CurrentDirection)
         -- LogBoth(string.format("Weapon %d at position %s with cardinal direction %s %d", weaponIndex, turretKey, turretNeutrals[turretKey].axis, turretNeutrals[turretKey].polarity))
