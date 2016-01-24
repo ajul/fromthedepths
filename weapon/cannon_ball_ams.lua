@@ -15,6 +15,10 @@ maxFireLateralDeviation = 5.0
 -- Start tracking when missile gets within this distance of the engagement surface.
 maxTrackOffset = 1000
 
+-- Approximate speed of the turrets. We will not attempt to traverse to missiles that we cannot aim at before the kill zone.
+-- Set higher to attempt more aggressive traverses.
+traverseSpeed = math.rad(90)
+
 -- Length of the cannon compared to the turret (m).
 cannonLength = 5.0
 
@@ -216,18 +220,21 @@ function ControlTurret(weaponIndex, weapon)
     local bestWarningAimIndex = nil
     local bestWarningId = nil
     for warningAimIndex, warningAim in ipairs(warningAims) do
-        local offset = Vector3.Distance(weapon.GlobalPosition, warningAim) - fuseDistance
-        if offset < bestOffset and offset > minFireOffset then
-            local warningId = warningAimsIds[warningAimIndex]
-            -- Allow fire if burst has recharged, or shots remaining in burst.
-            if currentTimestamp > (burstTimestamps[warningId] or 0) or (burstCounts[warningId] or 0) < shotsPerBurst then
+        local warningId = warningAimsIds[warningAimIndex]
+        -- Allow fire if burst has recharged, or shots remaining in burst.
+        if currentTimestamp > (burstTimestamps[warningId] or 0) or (burstCounts[warningId] or 0) < shotsPerBurst then
+            local offset = Vector3.Distance(weapon.GlobalPosition, warningAim) - fuseDistance
+            if offset < bestOffset and offset > minFireOffset then
                 local aim = warningAim - weapon.GlobalPosition
                 if IsLegalAim(aim, turretNeutrals[turretKey]) then
-                    -- LogBoth(string.format("Legal: %0.1f", offset))
-                    bestAim = aim
-                    bestOffset = offset
-                    bestWarningAimIndex = warningAimIndex
-                    bestWarningId = warningId
+                    local warning = warnings[warningId]
+                    if CanTraverseInTime(weapon, warning, aim, offset) then
+                        -- LogBoth(string.format("Legal: %0.1f", offset))
+                        bestAim = aim
+                        bestOffset = offset
+                        bestWarningAimIndex = warningAimIndex
+                        bestWarningId = warningId
+                    end
                 end
             end
         end
@@ -255,8 +262,10 @@ function ControlTurret(weaponIndex, weapon)
             end
         end
     elseif closestTarget ~= nil then
-        local targetAim = closestTarget.Position - weapon.GlobalPosition
-        I:AimWeaponInDirection(weaponIndex, targetAim.x, targetAim.y, targetAim.z, amsWeaponSlot)
+        local aim = closestTarget.Position - weapon.GlobalPosition
+        if IsLegalAim(aim, turretNeutrals[turretKey]) then
+            I:AimWeaponInDirection(weaponIndex, aim.x, aim.y, aim.z, amsWeaponSlot)
+        end
     end
 end
 
@@ -270,6 +279,14 @@ function IsLegalAim(aim, turretNeutral)
     end
     -- up/down turrets can aim anywhere for now
     return true
+end
+
+function CanTraverseInTime(weapon, warning, aim, offset)
+    local closeTime = (offset - minFireOffset) / (warning.Velocity.magnitude + 1)
+    local angle = math.acos(Vector3.Dot(aim.normalized, weapon.CurrentDirection.normalized))
+    local aimTime = angle / traverseSpeed
+    -- if aimTime >= closeTime then LogBoth(string.format("Unable to traverse in time! (need %0.2fs, close %0.2fs)", aimTime, closeTime)) end
+    return aimTime < closeTime
 end
 
 function ComputeLocalCardinalDirection(globalVector)
