@@ -4,6 +4,7 @@ amsWeaponSlot = 5
 -- Azimuth limit in degrees. Does not currently apply to turrets which neutrally face up/down.
 -- Note that these apply to aiming and only aiming.
 -- If you want a turret to not even turn behind itself you will need to set the field of fire restriction on the turret itself.
+-- Neutral position is computed when the turret is first detected by the script, so reloading the script in combat may have strange results.
 azimuthLimitCos = math.cos(math.rad(180))
 
 -- What offset (m) to consider firing weapon, where 0 is (hopefully) a direct hit.
