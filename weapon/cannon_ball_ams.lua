@@ -284,7 +284,7 @@ end
 
 function CanTraverseInTime(weapon, warning, aim, offset)
     local closeTime = (offset - minFireOffset) / (warning.Velocity.magnitude + 1)
-    local angle = math.acos(Vector3.Dot(aim.normalized, weapon.CurrentDirection.normalized))
+    local angle = math.acos(Vector3.Dot(aim.normalized, weapon.CurrentDirection.normalized)) - maxFireLateralDeviation / (aim.magnitude + 1)
     local aimTime = angle / traverseSpeed
     -- if aimTime >= closeTime then LogBoth(string.format("Unable to traverse in time! (need %0.2fs, close %0.2fs)", aimTime, closeTime)) end
     return aimTime < closeTime
