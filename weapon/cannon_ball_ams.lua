@@ -18,13 +18,14 @@ maxTrackOffset = 1000
 
 -- Approximate speed of the turrets. We will not attempt to traverse to missiles that we cannot aim at before the kill zone.
 -- Set higher to attempt more aggressive traverses.
-traverseSpeed = math.rad(90)
+turretTraverseSpeed = math.rad(90)
+casemateTraverseSpeed = math.rad(50)
 
 -- Length of the cannon compared to the turret (m).
 cannonLength = 5.0
 
 -- Timed fuse length (s). You may want to add an extra frame.
-fuseTime = 1
+fuseTime = 0.75
 -- Add an extra frame?
 extraFuseFrames = 1
 -- Extra time (s) to lead the target.
@@ -81,13 +82,17 @@ warningAims = {}
 -- warningAim indexes -> warningIds.
 warningAimsIds = {}
 
--- Neutral positions of turrets.
-turretNeutrals = {}
+-- Aim functions of weapons. Vector string -> function.
+weaponAimFunctions = {}
+
+-- Index -> target.
+targets = {}
 
 closestTarget = nil
 
 totalLeadTime = fuseTime + extraFuseFrames * frameDuration + extraLeadTime 
 
+WEAPON_TYPE_CANNON = 0
 WEAPON_TYPE_TURRET = 4
 
 -- Dummy weapon speed that the game returns for missiles.
@@ -101,8 +106,14 @@ function Update(Iarg)
     
     for weaponIndex = 0, I:GetWeaponCount() - 1 do
         local weapon = I:GetWeaponInfo(weaponIndex)
-        if weapon.WeaponType == WEAPON_TYPE_TURRET and weapon.WeaponSlot == amsWeaponSlot and not (weapon.Speed == MISSILE_WEAPON_SPEED) then
-            ControlTurret(weaponIndex, weapon)
+        if weapon.WeaponSlot == amsWeaponSlot then
+            if weapon.WeaponType == WEAPON_TYPE_TURRET and not (weapon.Speed == MISSILE_WEAPON_SPEED) then
+                local CanAim, CanTraverseInTime = GetTurretAimFunctions(weapon)
+                ControlWeapon(weaponIndex, weapon, CanAim, CanTraverseInTime)
+            elseif weapon.WeaponType == WEAPON_TYPE_CANNON then
+                local CanAim, CanTraverseInTime = GetCasemateAimFunctions(weapon)
+                ControlWeapon(weaponIndex, weapon, CanAim, CanTraverseInTime)
+            end
         end
     end
 end
@@ -156,11 +167,13 @@ function UpdateInfo()
     end
     
     -- Compute closest target for aiming at if no missiles are around.
+    targets = {}
     closestTarget = nil
     local closestDistance = 10000
     
     for targetIndex = 0, I:GetNumberOfTargets(0) - 1 do
         local target = I:GetTargetInfo(0, targetIndex)
+        targets[targetIndex+1] = target
         local distance = Vector3.Distance(myPosition, target.Position)
         if distance < closestDistance then
             closestTarget = target
@@ -206,16 +219,10 @@ function WarningCircularAim(warning)
 end
 
 -- Aim turret at the nearest warning aim position that isn't below minimum range.
-function ControlTurret(weaponIndex, weapon)
-    local turretKey = VectorIntegerString(ComputeLocalPosition(weapon.GlobalPosition))
+function ControlWeapon(weaponIndex, weapon, CanAim, CanTraverseInTime)
     local weaponSpeed = (weapon.Speed > 0 and weapon.Speed) or defaultWeaponSpeed
     local fuseDistance = weaponSpeed * (fuseTime + extraFuseFrames * frameDuration) + cannonLength
-    if turretNeutrals[turretKey] == nil then
-        turretNeutrals[turretKey] = ComputeLocalCardinalDirection(weapon.CurrentDirection)
-        -- LogBoth(string.format("Weapon %d at position %s with cardinal direction %s %d", weaponIndex, turretKey, turretNeutrals[turretKey].axis, turretNeutrals[turretKey].polarity))
-    end
     
-    -- LogBoth(string.format("Neutral aim %d: %s", weaponIndex, tostring(neutralAim)))
     local bestOffset = maxTrackOffset
     local bestAim = nil
     local bestWarningAimIndex = nil
@@ -227,7 +234,7 @@ function ControlTurret(weaponIndex, weapon)
             local offset = Vector3.Distance(weapon.GlobalPosition, warningAim) - fuseDistance
             if offset < bestOffset and offset > minFireOffset then
                 local aim = warningAim - weapon.GlobalPosition
-                if IsLegalAim(aim, turretNeutrals[turretKey]) then
+                if CanAim(aim) then
                     local warning = warnings[warningId]
                     if CanTraverseInTime(weapon, warning, aim, offset) then
                         -- LogBoth(string.format("Legal: %0.1f", offset))
@@ -262,30 +269,68 @@ function ControlTurret(weaponIndex, weapon)
                 end
             end
         end
-    elseif closestTarget ~= nil then
+        return
+    end
+    
+    -- Fallback: aim at closest target.
+    if closestTarget ~= nil then
         local aim = closestTarget.Position - weapon.GlobalPosition
-        if IsLegalAim(aim, turretNeutrals[turretKey]) then
+        if CanAim(aim) then
             I:AimWeaponInDirection(weaponIndex, aim.x, aim.y, aim.z, amsWeaponSlot)
         end
     end
 end
 
--- Do the azimuth limits allow the turret to aim this way?
-function IsLegalAim(aim, turretNeutral)
-    if turretNeutral.axis ~= "y" then
-        local azimuthAim = Vector3.ProjectOnPlane(aim, myVectors.y)
-        local neutralAim = myVectors[turretNeutral.axis] * turretNeutral.polarity
-        local neutralAimCos = Vector3.Dot(azimuthAim.normalized, neutralAim.normalized)
-        return neutralAimCos >= azimuthLimitCos
+-- Produces a function that takes the aim and returns whether the turret can aim at the target.
+function GetTurretAimFunctions(weapon)
+    local weaponKey = VectorIntegerString(ComputeLocalPosition(weapon.GlobalPosition))
+    if weaponAimFunctions[weaponKey] == nil then
+        local neutralAim = ComputeLocalCardinalDirection(weapon.CurrentDirection)
+        if neutralAim.axis ~= "y" then
+            weaponAimFunctions[weaponKey] = function(aim)
+                local azimuthAim = Vector3.ProjectOnPlane(aim, myVectors.y)
+                local neutralAim = myVectors[neutralAim.axis] * neutralAim.polarity
+                local neutralAimCos = Vector3.Dot(azimuthAim.normalized, neutralAim.normalized)
+                return neutralAimCos >= azimuthLimitCos
+            end
+        else
+            -- up/down turrets can aim anywhere for now
+            weaponAimFunctions[weaponKey] = function(aim)
+                return true
+            end
+        end
     end
-    -- up/down turrets can aim anywhere for now
-    return true
+    
+    return weaponAimFunctions[weaponKey], TurretCanTraverseInTime
 end
 
-function CanTraverseInTime(weapon, warning, aim, offset)
+-- Produces a function that takes the aim and returns whether the turret can aim at the target.
+-- Assumes 45 degree traverse in each direction.
+function GetCasemateAimFunctions(weapon)
+    local weaponKey = VectorIntegerString(ComputeLocalPosition(weapon.GlobalPosition))
+    if weaponAimFunctions[weaponKey] == nil then
+        local neutralAim = ComputeLocalCardinalDirection(weapon.CurrentDirection)
+        weaponAimFunctions[weaponKey] = function(aim)
+            local majorAxis = ComputeLocalCardinalDirection(weapon.CurrentDirection)
+            return majorAxis.axis == neutralAim.axis and majorAxis.polarity == neutralAim.polarity
+        end
+    end
+
+    return weaponAimFunctions[weaponKey], CasemateCanTraverseInTime
+end
+
+function TurretCanTraverseInTime(weapon, warning, aim, offset)
     local closeTime = (offset - minFireOffset) / (warning.Velocity.magnitude + 1)
     local angle = math.acos(Vector3.Dot(aim.normalized, weapon.CurrentDirection.normalized)) - maxFireLateralDeviation / (aim.magnitude + 1)
-    local aimTime = angle / traverseSpeed
+    local aimTime = angle / turretTraverseSpeed
+    -- if aimTime >= closeTime then LogBoth(string.format("Unable to traverse in time! (need %0.2fs, close %0.2fs)", aimTime, closeTime)) end
+    return aimTime < closeTime
+end
+
+function CasemateCanTraverseInTime(weapon, warning, aim, offset)
+    local closeTime = (offset - minFireOffset) / (warning.Velocity.magnitude + 1)
+    local angle = math.acos(Vector3.Dot(aim.normalized, weapon.CurrentDirection.normalized)) - maxFireLateralDeviation / (aim.magnitude + 1)
+    local aimTime = angle / casemateTraverseSpeed
     -- if aimTime >= closeTime then LogBoth(string.format("Unable to traverse in time! (need %0.2fs, close %0.2fs)", aimTime, closeTime)) end
     return aimTime < closeTime
 end
