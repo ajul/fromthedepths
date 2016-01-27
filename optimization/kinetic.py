@@ -67,45 +67,69 @@ modules = {
     'head_ap' : Module('Head, AP Capped', 1.5, 3.5, 7.5),
     'head_composite' : Module('Head, Composite', 1.6, 4.5, 5.0),
     'head_sabot' : Module('Head, Sabot', 2.05, 6.75, 1.8),
+    'head_hollow_point' : Module('Head, Hollow Point', 1.4, 0.25, 1.2),
+    'body_gravity_compensator' : Module('Body, Gravity Compensator', 0.9, 0.4, 0.6),
     'body_sabot' : Module('Body, Sabot', 1.75, 3.6, 2.7),
     'body_solid' : Module('Body, Solid', 1.3, 2, 5),
     'base_bleeder' : Module('Base, Bleeder', 1.1, 1.0, 1.0),
+    'base_supercavitation' : Module('Base, Supercavitation', 0.9, 0.4, 0.6),
+    'base_graviton_ram' : Module('Base, Graviton Ram', 0.9, 0.5, 1.0),
 }
 
-maxModuleCount = 54 # 8 = 125 mm
+maxModuleCount = 10 # 8 = 125 mm
 testGauge = 1.0 / maxModuleCount
-testArmour = 10
-
-def allBodiesIterator(bodyCount):
-    if bodyCount == 0:
-        yield []
-    else:
-        for restOfBody in bodiesIterator(bodyCount - 1):
-            yield ['body_sabot'] + restOfBody
-            yield ['body_solid'] + restOfBody
+testArmour = 30
 
 # kinetic has better weight at rear relative to ap
 def sabotFirstBodiesIterator(bodyCount):
     for i in range(0, bodyCount + 1):
         yield ['body_sabot'] * i + ['body_solid'] * (bodyCount - i)
 
+def sabotOnlyBodiesIterator(bodyCount):
+    yield ['body_sabot'] * bodyCount
+
+standardBases = [
+    [],
+    ['base_bleeder'],
+    ]
+
+supercavitationBases = [
+    ['base_supercavitation'],
+    ]
+
+gravityCompensatorBases = [
+    ['body_gravity_compensator'],
+    ['body_gravity_compensator', 'base_bleeder'],
+    ]
+
+gravitonRamBases = [
+    ['base_graviton_ram'],
+    ]
+
 def testShellsIterator(maxBodyCount):
-    for head in ['head_ap', 'head_composite', 'head_sabot']:
+    for head in [
+        #['head_ap'],
+        #['head_composite'],
+        #['head_sabot'],
+        ['head_hollow_point'],
+        ]:
         for bodyCount in range(maxBodyCount + 1):
             for bodies in sabotFirstBodiesIterator(bodyCount):
-                yield [head] + bodies # + ['base_bleeder']
+                for base in gravitonRamBases:
+                    yield tuple(head + bodies + base)
 
+propellantCounts = {}
 bestScoreOverall = 0.0
 bestShellOverall = None
 
-for shell in testShellsIterator(4):
+for shell in testShellsIterator(16):
     shellCount = len(shell)
 
-    if shellCount >= 0.4 * maxModuleCount: continue
+    if shellCount >= 0.5 * maxModuleCount: continue
     
     shellModules = [modules[moduleKey] for moduleKey in shell]
     print('-' * 64)
-    print('Shell: %s' % shell)
+    print('Shell: %s' % str(shell))
     print('Speed, AP, Kinetic modifier: %0.3f, %0.3f, %0.3f' % (speedModifier(shellModules),
                                                                 apModifier(shellModules),
                                                                 kineticModifier(shellModules)))
@@ -122,7 +146,7 @@ for shell in testShellsIterator(4):
         ap = computeAP(shellModules, propellantCount, testGauge)
         netDamage = kd * computePenetrationFactor(ap, testArmour)
         ammoCost = computeAmmoCost(shellModules, propellantCount, testGauge)
-        score = vel * netDamage / ammoCost
+        score = kd / ammoCost
         if score > bestScore:
             bestScore = score
             bestPropellantCount = propellantCount
@@ -136,9 +160,13 @@ for shell in testShellsIterator(4):
     print('Ammo cost: %0.1f' % computeAmmoCost(shellModules, bestPropellantCount, testGauge))
     print('Score: %0.1f' % bestScore)
 
+    propellantCounts[shell] = bestPropellantCount
+
     if bestScore > bestScoreOverall:
         bestScoreOverall = bestScore
         bestShellOverall = shell
 
 print('-' * 64)
-print('Grand champion: %s (%0.2f)' % (bestShellOverall, bestScoreOverall))
+print('Grand champion: %s + %d propellants (%0.2f)' % (bestShellOverall, propellantCounts[bestShellOverall], bestScoreOverall))
+
+# findings: head_ap, body_sabot, body_sabot or base_bleeder, 5 or 7 propellants

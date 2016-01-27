@@ -10,7 +10,7 @@ cleanupPeriod = 40
 missileCullTime = 5
 missileCullVelocity = 40
 
-numberOfTargets = {}
+numberOfTargets = 0
 targetsByIndex = {}
 targetsById = {}
 
@@ -55,7 +55,13 @@ function UpdateTargets(I)
 end
 
 function SelectTarget(I, missile)
-    return targetsById[missileTargets[missile.Id]] or targetsByIndex[missile.Id % numberOfTargets]
+    local target = targetsById[missileTargets[missile.Id]]
+    if target then
+        return target
+    end
+    target = targetsByIndex[missile.Id % numberOfTargets] 
+    missileTargets[missile.Id] = target
+    return target
 end
 
 function Cleanup()

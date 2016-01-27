@@ -35,9 +35,9 @@ rollPID = {
 }
 
 -- Distance to look around to avoid collision.
-collisionAvoidanceDistance = 50
+collisionAvoidanceDistance = 100
 -- Time to look ahead to avoid collision.
-collisionAvoidanceTime = 1
+collisionAvoidanceTime = 2
 -- Try to go this high above the potential collision.
 collisionAvoidanceHeight = 50
 

@@ -34,7 +34,7 @@ def drawPolygon(xy, **kwargs):
 hexRadius = 1/4
 hexXY = [(hexRadius * math.cos(math.radians(angle)),
           hexRadius * math.sin(math.radians(angle))) for angle in range(0, 360, 60)]
-drawPolygon(hexXY, fill=(191, 0, 0))
+drawPolygon(hexXY, fill=(170, 0, 0))
 
 # white "aperture"
 apertureLineWidth = 1/8
@@ -54,7 +54,7 @@ for angle in range(0, 360, 60):
     end = (2.0 * math.cos(math.radians(angle + 120)) + start[0],
            2.0 * math.sin(math.radians(angle + 120)) + start[1])
     xy = [start, end]
-    drawLine(xy, apertureLineWidth, fill=(0, 127, 0))
+    drawLine(xy, apertureLineWidth, fill=(0, 85, 0))
 
 iconImage.resize((finalResolution, finalResolution), Image.ANTIALIAS).save("out/icon.png")
 flagImage = flagImage.resize((round(finalResolution * flagAspectRatio), finalResolution), Image.ANTIALIAS)
