@@ -1,6 +1,6 @@
 -- Desired altitudes.
 desiredASL = 10
-desiredAGL = 50
+desiredAGL = 80
 
 desiredPitch = 0
 desiredRoll = 0
@@ -34,6 +34,13 @@ rollPID = {
     EMA = 0, -- Exponential moving average of throttle.
 }
 
+-- Distance to look around to avoid collision.
+collisionAvoidanceDistance = 50
+-- Time to look ahead to avoid collision.
+collisionAvoidanceTime = 1
+-- Try to go this high above the potential collision.
+collisionAvoidanceHeight = 50
+
 -- The I in Update(I).
 I = nil
 
@@ -56,15 +63,6 @@ myRoll = 0
 -- Time and duration of the current frame.
 frameTime = 0
 frameDuration = 1/40
-
-altitudeThrottleOffset = 0
-altitudeThrottle = 0
-
-pitchThrottleOffset = 0
-pitchThrottle = 0
-
-rollThrottleOffset = 0
-rollThrottle = 0
 
 firstRun = true
 state = nil
@@ -119,6 +117,7 @@ function ChooseState()
     else
         local terrainAltitude = I:GetTerrainAltitudeForLocalPosition(Vector3.zero)
         local desiredAltitude = math.max(desiredASL, terrainAltitude + desiredAGL)
+        desiredAltitude = math.max(desiredAltitude, CollisionAvoidanceAltitude())
         local currentAltitude = myPosition.y + GetLowestPointOffset()
         
         UpdatePID(altitudePID, desiredAltitude, currentAltitude, myVelocity.y, 1)
@@ -139,6 +138,38 @@ function ChooseState()
         state = StateMain
     end
 end
+
+function CollisionAvoidanceAltitude()
+    local result = desiredASL
+    for targetIndex = 0, I:GetNumberOfTargets(0) - 1 do
+        local target = I:GetTargetInfo(0, targetIndex)
+        local closeTime = ComputeCloseTime(target.Position, target.Velocity)
+        if closeTime < collisionAvoidanceTime then
+            result = math.max(result, target.Position.y + collisionAvoidanceHeight)
+        end
+    end
+    
+    for friendlyIndex = 0, I:GetFriendlyCount() - 1 do
+        local friendly = I:GetFriendlyInfo(friendlyIndex)
+        -- Higher vehicle jumps.
+        if friendly.ReferencePosition.y < myPosition.y then
+            local closeTime = ComputeCloseTime(friendly.CenterOfMass, friendly.Velocity)
+            if closeTime < collisionAvoidanceTime then
+                result = math.max(result, friendly.CenterOfMass.y + collisionAvoidanceHeight)
+            end
+        end
+    end
+    
+    return result
+end
+
+function ComputeCloseTime(targetPosition, targetVelocity)
+    local relativeVelocity = targetVelocity - myVelocity
+    local relativePosition = targetPosition - myPosition
+    local closeRate = Vector3.Dot(-relativeVelocity, relativePosition.normalized)
+    local distance = math.max(0, relativePosition.magnitude - collisionAvoidanceDistance)
+    return distance / math.max(closeRate, 1.0)
+end 
 
 -- Computes the lowest point on the bounding box relative to construct position.
 function GetLowestPointOffset()
