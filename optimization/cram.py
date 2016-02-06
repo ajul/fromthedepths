@@ -33,7 +33,7 @@ def computeReloadTime(cram):
     return base * (1 + 1 / math.sqrt(0.1 * (1 + 2 * cram["ammo"])))
 
 def computePelletsPerSecond(cram):
-    return 0.25 * cram["pellet"]
+    return 0.1 * cram["pellet"]
 
 def computePelletsPerShot(cram):
     return computePelletsPerSecond(cram) * computeReloadTime(cram)
@@ -48,13 +48,14 @@ def computeShotPower(cram):
     density = computeDensity(cram)
     if density == 0: return 0
     power = biam(0, density, pellets / density, 0.9)
-    return min(power, 40)
+    power = 0.1 * power + 0.9 * max(0, power - 40)
+    return power
 
 costs = {
     'gauge' : 200,
     'barrel' : 200,
     'ammo' : 300,
-    'pellet' : 1000,
+    'pellet' : 600,
     }
 
 def computeCost(cram):
@@ -63,13 +64,19 @@ def computeCost(cram):
         result += costs[key] * value
     return result
 
+def computeBlocks(cram):
+    return sum(cram.values()) + 1
+
 def computeScore(cram):
-    return 1000.0 * computeVelocity(cram) * computeShotPower(cram) ** 2 / (computeCost(cram) * computeReloadTime(cram))
+    #return 1000.0 * computeVelocity(cram) * computeShotPower(cram) / (computeCost(cram) * computeReloadTime(cram))
+    return 1000.0 * computeShotPower(cram) / (computeCost(cram) * max(20.0, computeReloadTime(cram)))
+    # return 1000.0 * computeShotPower(cram) / computeCost(cram)
 
 def statString(cram):
     result = ""
     result += "Score: %0.2f Cost: %d\n" % (computeScore(cram), computeCost(cram))
     result += "Blocks: gauge %(gauge)d, barrel %(barrel)d, ammo %(ammo)d, pellet %(pellet)d\n" % cram
+    result += "Power: %0.1f\n" % (computeShotPower(cram))
     result += "Velocity: %0.1f\n" % (computeVelocity(cram))
     result += "Gauge: %0.1f mm\n" % (computeGauge(cram) * 1000)
     result += "Reload time: %0.2f (lowest possible %0.2f)\n" % (computeReloadTime(cram), computeLowRelativeVolume(cram))
@@ -80,7 +87,7 @@ def statString(cram):
 
 initial = {
     'gauge' : 0,
-    'barrel' : 0,
+    'barrel' : 1,
     'ammo' : 8,
     'pellet' : 0,
     }

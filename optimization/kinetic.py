@@ -76,9 +76,9 @@ modules = {
     'base_graviton_ram' : Module('Base, Graviton Ram', 0.9, 0.5, 1.0),
 }
 
-maxModuleCount = 10 # 8 = 125 mm
+maxModuleCount = 12 # 8 = 125 mm
 testGauge = 1.0 / maxModuleCount
-testArmour = 30
+testArmour = 10
 
 # kinetic has better weight at rear relative to ap
 def sabotFirstBodiesIterator(bodyCount):
@@ -87,6 +87,9 @@ def sabotFirstBodiesIterator(bodyCount):
 
 def sabotOnlyBodiesIterator(bodyCount):
     yield ['body_sabot'] * bodyCount
+
+def solidOnlyBodiesIterator(bodyCount):
+    yield ['body_solid'] * bodyCount
 
 standardBases = [
     [],
@@ -108,14 +111,14 @@ gravitonRamBases = [
 
 def testShellsIterator(maxBodyCount):
     for head in [
-        #['head_ap'],
-        #['head_composite'],
+        ['head_ap'],
+        ['head_composite'],
         #['head_sabot'],
-        ['head_hollow_point'],
+        #['head_hollow_point'],
         ]:
         for bodyCount in range(maxBodyCount + 1):
-            for bodies in sabotFirstBodiesIterator(bodyCount):
-                for base in gravitonRamBases:
+            for bodies in solidOnlyBodiesIterator(bodyCount):
+                for base in supercavitationBases:
                     yield tuple(head + bodies + base)
 
 propellantCounts = {}
@@ -146,7 +149,7 @@ for shell in testShellsIterator(16):
         ap = computeAP(shellModules, propellantCount, testGauge)
         netDamage = kd * computePenetrationFactor(ap, testArmour)
         ammoCost = computeAmmoCost(shellModules, propellantCount, testGauge)
-        score = kd / ammoCost
+        score = netDamage / ammoCost
         if score > bestScore:
             bestScore = score
             bestPropellantCount = propellantCount
