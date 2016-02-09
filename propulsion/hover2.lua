@@ -1,10 +1,11 @@
 -- Desired altitudes.
-desiredASL = 10
-desiredAGL = 80
+desiredASL = 10 -- from bottom of hull
+desiredAGL = 100
 
 desiredPitch = 0
 desiredRoll = 0
 
+-- Minimum distance from CoM to use for pitch/roll.
 minimumMomentArm = 0.25
 
 altitudePID = {
@@ -116,13 +117,16 @@ function ChooseState()
         state = StateInit
     else
         local terrainAltitude = I:GetTerrainAltitudeForLocalPosition(Vector3.zero)
-        local desiredAltitude = math.max(desiredASL, terrainAltitude + desiredAGL)
+        local lookaheadTerrainAltitude = I:GetTerrainAltitudeForPosition(myPosition + myVelocity * collisionAvoidanceTime)
+        local desiredAltitude = math.max(desiredASL, math.max(terrainAltitude, lookaheadTerrainAltitude) + desiredAGL)
         desiredAltitude = math.max(desiredAltitude, CollisionAvoidanceAltitude())
         local currentAltitude = myPosition.y + GetLowestPointOffset()
         
-        UpdatePID(altitudePID, desiredAltitude, currentAltitude, myVelocity.y, 1)
+        local maxMV = 1
         
-        local maxMV = 1 - math.abs(altitudePID.MV)
+        UpdatePID(altitudePID, desiredAltitude, currentAltitude, myVelocity.y, maxMV)
+        
+        -- maxMV = 1 - math.abs(altitudePID.MV)
         UpdatePID(pitchPID, desiredPitch, myPitch, math.deg(myLocalAngularVelocity.x), maxMV)
         
         maxMV = maxMV - math.abs(pitchPID.MV)
@@ -144,7 +148,7 @@ function CollisionAvoidanceAltitude()
     for targetIndex = 0, I:GetNumberOfTargets(0) - 1 do
         local target = I:GetTargetInfo(0, targetIndex)
         local closeTime = ComputeCloseTime(target.Position, target.Velocity)
-        if closeTime < collisionAvoidanceTime then
+        if closeTime < collisionAvoidanceTime and target.Position.y < myPosition.y + math.abs(collisionAvoidanceHeight) then
             result = math.max(result, target.Position.y + collisionAvoidanceHeight)
         end
     end
