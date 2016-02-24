@@ -3,6 +3,23 @@ import math
 minGauge = 0.2
 maxGauge = 2.0
 
+costs = {
+    'base': 10000,
+    'gauge' : 200,
+    'barrel' : 200,
+    'ammo' : 300,
+    'pellet' : 420,
+    'autoloader' : 190,
+    'connector' : 450,
+    }
+
+autoloaderFacesPerAmmo = 2
+autoloaderFacesPerPellet = 2.5
+autoloadersPerPellet = 1
+connectorsPerPellet = 0.25
+
+costs['pellet'] += autoloadersPerPellet * costs['autoloader'] + connectorsPerPellet * costs['connector']
+
 def biam(base, count, increase, rolloff):
     return base + increase * (1 - rolloff ** count) / (1 - rolloff)
 
@@ -30,10 +47,10 @@ def computeAmmoUse(cram):
 
 def computeReloadTime(cram):
     base = computeLowRelativeVolume(cram)
-    return base * (1 + 1 / math.sqrt(0.1 * (1 + 2 * cram["ammo"])))
+    return base * (1 + 1 / math.sqrt(0.1 * (1 + 2 * cram["ammo"] * autoloaderFacesPerAmmo)))
 
 def computePelletsPerSecond(cram):
-    return 0.1 * cram["pellet"]
+    return 0.1 * cram["pellet"] * (0.5 + autoloaderFacesPerPellet)
 
 def computePelletsPerShot(cram):
     return computePelletsPerSecond(cram) * computeReloadTime(cram)
@@ -48,34 +65,29 @@ def computeShotPower(cram):
     density = computeDensity(cram)
     if density == 0: return 0
     power = biam(0, density, pellets / density, 0.9)
-    power = 0.1 * power + 0.9 * max(0, power - 40)
+    power = power * power
+    # power = 0.1 * power + 0.9 * max(0, power - 40)
     return power
 
-costs = {
-    'gauge' : 200,
-    'barrel' : 200,
-    'ammo' : 300,
-    'pellet' : 600,
-    }
-
 def computeCost(cram):
-    result = 300
+    result = costs['base']
     for key, value in cram.items():
         result += costs[key] * value
     return result
 
 def computeBlocks(cram):
-    return sum(cram.values()) + 1
+    return sum(cram.values()) + (autoloadersPerPellet + connectorsPerPellet) * cram['pellet'] + 1
 
 def computeScore(cram):
-    #return 1000.0 * computeVelocity(cram) * computeShotPower(cram) / (computeCost(cram) * computeReloadTime(cram))
-    return 1000.0 * computeShotPower(cram) / (computeCost(cram) * max(20.0, computeReloadTime(cram)))
+    return 1000.0 * computeVelocity(cram) * computeShotPower(cram) / (computeCost(cram) * computeReloadTime(cram))
+    # return 1000.0 * computeShotPower(cram) / (computeCost(cram) * max(20.0, computeReloadTime(cram)))
     # return 1000.0 * computeShotPower(cram) / computeCost(cram)
 
 def statString(cram):
     result = ""
     result += "Score: %0.2f Cost: %d\n" % (computeScore(cram), computeCost(cram))
     result += "Blocks: gauge %(gauge)d, barrel %(barrel)d, ammo %(ammo)d, pellet %(pellet)d\n" % cram
+    result += "Total blocks: %d\n" % (computeBlocks(cram))
     result += "Power: %0.1f\n" % (computeShotPower(cram))
     result += "Velocity: %0.1f\n" % (computeVelocity(cram))
     result += "Gauge: %0.1f mm\n" % (computeGauge(cram) * 1000)
@@ -98,7 +110,10 @@ def optimize(initial):
     improved = True
     while improved:
         improved = False
-        for key in ['barrel', 'ammo', 'pellet', 'gauge']:
+        for key in [#'barrel',
+                    'ammo',
+                    'pellet',
+                    'gauge']:
             newCram = currentCram.copy()
             newCram[key] += 1
             newScore = computeScore(newCram)
