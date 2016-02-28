@@ -1,5 +1,5 @@
 -- Desired altitudes.
-desiredASL = 10 -- from bottom of hull
+desiredASL = 300 -- from bottom of hull
 desiredAGL = 100
 
 desiredPitch = 0

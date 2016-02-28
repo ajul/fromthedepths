@@ -78,7 +78,8 @@ modules = {
 
 maxModuleCount = 12 # 8 = 125 mm
 testGauge = 1.0 / maxModuleCount
-testArmour = 10
+# testGauge = 0.225
+testArmour = 18
 
 # kinetic has better weight at rear relative to ap
 def sabotFirstBodiesIterator(bodyCount):
@@ -113,13 +114,23 @@ def testShellsIterator(maxBodyCount):
     for head in [
         ['head_ap'],
         ['head_composite'],
-        #['head_sabot'],
+        ['head_sabot'],
         #['head_hollow_point'],
         ]:
         for bodyCount in range(maxBodyCount + 1):
-            for bodies in solidOnlyBodiesIterator(bodyCount):
-                for base in supercavitationBases:
+            for bodies in sabotFirstBodiesIterator(bodyCount):
+                for base in standardBases:
                     yield tuple(head + bodies + base)
+
+def computeScore(shellModules, propellantCount, gauge = testGauge, armour = testArmour):
+    if isinstance(shellModules[0], str):
+        shellModules = [modules[shellModule] for shellModule in shellModules]
+    vel = computeMuzzleVelocity(shellModules, propellantCount, gauge)
+    kd = computeKineticDamage(shellModules, propellantCount, gauge)
+    ap = computeAP(shellModules, propellantCount, gauge)
+    netDamage = kd * computePenetrationFactor(ap, armour)
+    ammoCost = computeAmmoCost(shellModules, propellantCount, gauge)
+    return ap * netDamage / ammoCost
 
 propellantCounts = {}
 bestScoreOverall = 0.0
@@ -144,12 +155,7 @@ for shell in testShellsIterator(16):
     bestPropellantCount = propellantCount
     maxPropellantCount = min(3 * shellCount, maxModuleCount - shellCount)
     while propellantCount <= maxPropellantCount:
-        vel = computeMuzzleVelocity(shellModules, propellantCount, testGauge)
-        kd = computeKineticDamage(shellModules, propellantCount, testGauge)
-        ap = computeAP(shellModules, propellantCount, testGauge)
-        netDamage = kd * computePenetrationFactor(ap, testArmour)
-        ammoCost = computeAmmoCost(shellModules, propellantCount, testGauge)
-        score = netDamage / ammoCost
+        score = computeScore(shellModules, propellantCount, testGauge, testArmour)
         if score > bestScore:
             bestScore = score
             bestPropellantCount = propellantCount

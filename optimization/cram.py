@@ -60,11 +60,14 @@ def computeDensity(cram):
     density = pellets / computeHighRelativeVolume(cram)
     return density
 
-def computeShotPower(cram):
+def computeEffectivePelletsPerShot(cram):
     pellets = computePelletsPerShot(cram)
     density = computeDensity(cram)
     if density == 0: return 0
-    power = biam(0, density, pellets / density, 0.9)
+    return biam(0, density, pellets / density, 0.9)
+
+def computeShotPower(cram):
+    power = computeEffectivePelletsPerShot(cram)
     power = power * power
     # power = 0.1 * power + 0.9 * max(0, power - 40)
     return power
@@ -92,7 +95,7 @@ def statString(cram):
     result += "Velocity: %0.1f\n" % (computeVelocity(cram))
     result += "Gauge: %0.1f mm\n" % (computeGauge(cram) * 1000)
     result += "Reload time: %0.2f (lowest possible %0.2f)\n" % (computeReloadTime(cram), computeLowRelativeVolume(cram))
-    result += "Pellets: %0.1f per s, %0.1f per shot, %0.1f density\n" % (computePelletsPerSecond(cram), computePelletsPerShot(cram), computeDensity(cram))
+    result += "Pellets: %0.1f per s, %0.1f per shot (%0.1f effective), %0.1f density\n" % (computePelletsPerSecond(cram), computePelletsPerShot(cram), computeEffectivePelletsPerShot(cram), computeDensity(cram))
     result += "Ammo use: %0.1f per shot, %0.1f per s\n" % (computeAmmoUse(cram), computeAmmoUse(cram) / computeReloadTime(cram))
     return result
 
@@ -110,7 +113,7 @@ def optimize(initial):
     improved = True
     while improved:
         improved = False
-        for key in [#'barrel',
+        for key in ['barrel',
                     'ammo',
                     'pellet',
                     'gauge']:
