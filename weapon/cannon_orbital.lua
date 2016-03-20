@@ -4,14 +4,23 @@ weaponSlot = 0
 -- What order polynomial to use. 1 = linear (similar to stock), 2 = quadratic (acceleration)
 predictionOrder = 2
 
+-- Aim this far towards the aim point offset.
+aimpointWeight = 0.5
+
+-- Account for projectiles not being emitted from origin.
+barrelLength = 16
+
 -- Don't fire beyond this range.
 maximumRange = 3000
+
+-- Multiply step sizes by this factor. Should be between 0 and 1. Lower slows convergence but may help avoid overshooting.
+stepSizeGain = 0.5
 
 -- Terminate early if we are within this altitude of perfect aim.
 altitudeTolerance = 1
 
 -- How many iterations to run algorithm.
-maxIterationCount = 8
+maxIterationCount = 16
 
 -- The I in Update(I).
 I = nil
@@ -30,6 +39,8 @@ target = nil
 targetDerivatives = {}
 -- We use a frame that moves horizontally (but not vertically) with us.
 targetVelocity = Vector3.zero
+-- Position of aimpoint relative to position.
+targetAimpointOffset = Vector3.zero
 
 -- Constants.
 g = 9.81
@@ -96,16 +107,22 @@ function UpdateInfo()
                 newTargetDerivatives[i+1] = (newTargetDerivatives[i] - targetDerivatives[i]) / frameDuration
             end
         end
+        
         targetDerivatives = newTargetDerivatives
+        targetAimpointOffset = newTarget.AimPointPosition - newTarget.Position
     else
         -- No target.
         targetDerivatives = {}
+        
+        targetAimpointOffset = Vector3.zero
     end
+    
+    target = newTarget
     
     targetVelocity = (targetDerivatives[2] or Vector3.zero)
     targetVelocity = Vector3(targetVelocity.x - myVelocity.x, targetVelocity.y, targetVelocity.z - myVelocity.z)
     
-    target = newTarget
+    
 end
 
 function ControlWeapon(weaponIndex, weapon)
@@ -129,7 +146,10 @@ function PredictPosition(t)
 end
 
 function ComputeAim(weapon)
-    local t = Vector3.Distance(target.Position, weapon.GlobalPosition) / weapon.Speed
+    -- Assume barrel points directly towards target.
+    local firePosition = Vector3.MoveTowards(weapon.GlobalPosition, target.AimPointPosition, barrelLength)
+    
+    local t = Vector3.Distance(target.Position, firePosition) / weapon.Speed
     
     local vx, vy0, altitudeError, relativePosition
     
@@ -138,7 +158,7 @@ function ComputeAim(weapon)
         t = math.max(0, t)
         
         local predictedPosition = PredictPosition(t)
-        relativePosition = predictedPosition - weapon.GlobalPosition
+        relativePosition = predictedPosition - firePosition
         local x = HorizontalMagnitude(relativePosition)
         vx = x / t
         
@@ -146,25 +166,25 @@ function ComputeAim(weapon)
             vy0 = math.sqrt(weapon.Speed * weapon.Speed - vx * vx)
             
             -- If a flat shot would overfly the target, aim downwards.
-            if AltitudeAtTime(weapon.GlobalPosition.y, myVelocity.y, t) > predictedPosition.y then
+            if AltitudeAtTime(firePosition.y, myVelocity.y, t) > predictedPosition.y then
                 vy0 = -vy0
             end
             
             -- Add our vertical velocity.
             vy0 = vy0 + myVelocity.y
             
-            altitudeError = AltitudeAtTime(weapon.GlobalPosition.y, vy0, t) - predictedPosition.y
+            altitudeError = AltitudeAtTime(firePosition.y, vy0, t) - predictedPosition.y
             
-            if altitudeError < altitudeTolerance then
+            if math.abs(altitudeError) < altitudeTolerance then
                 -- Good enough.
                 break
             end
             
             local altitudeErrorDerivative = vy0 - targetVelocity.y
             
-            -- LogBoth(string.format("%i: distance %f, t %f, predict alt %f, alt err %f, alt err deriv %f", i, relativePosition.magnitude, t, predictedPosition.y, altitudeError, altitudeErrorDerivative))
+            --LogBoth(string.format("%i: distance %f, t %f, predict alt %f, alt err %f, alt err deriv %f", i, relativePosition.magnitude, t, predictedPosition.y, altitudeError, altitudeErrorDerivative))
             
-            local newT = t - altitudeError / altitudeErrorDerivative
+            local newT = t - stepSizeGain * altitudeError / altitudeErrorDerivative
             
             if newT > projectileLifetime and t == projectileLifetime then
                 -- Projectile would despawn before reaching target.
@@ -178,8 +198,8 @@ function ComputeAim(weapon)
         end
     end
     
-    -- LogBoth(string.format("horiz range: %0.1f, time: %0.1f, vel %0.1f, %0.1f, error %0.1f", HorizontalMagnitude(relativePosition), t, vx, vy0, altitudeError))
-    return Vector3(relativePosition.x, t * vy0, relativePosition.z)
+    --LogBoth(string.format("horiz range: %0.1f, time: %0.1f, vel %0.1f, %0.1f, error %0.1f", HorizontalMagnitude(relativePosition), t, vx, vy0, altitudeError))
+    return Vector3(relativePosition.x, t * vy0, relativePosition.z) + targetAimpointOffset * aimpointWeight
 end
 
 function AltitudeAtTime(y0, vy0, t)
@@ -204,7 +224,7 @@ function AltitudeAtTime(y0, vy0, t)
         -- Suborbital segment.
         local vertexT, transition_vy, shortfallY = SuborbitalVertex(y0, vy0)
         
-        -- LogBoth(string.format("SuborbitalVertex(y0=%0.1f, vy0=%0.1f) -> vertexT=%0.1f, transition_vy=%0.1f, shortfallY=%0.1f", y0, vy0, vertexT, transition_vy, shortfallY or -1.0))
+        --LogBoth(string.format("SuborbitalVertex(y0=%0.1f, vy0=%0.1f) -> vertexT=%0.1f, transition_vy=%0.1f, shortfallY=%0.1f", y0, vy0, vertexT, transition_vy, shortfallY or -1.0))
         
         if shortfallY == nil then
             -- Hyperbolic sine trajectory.
@@ -292,12 +312,12 @@ function SuborbitalVertex(y0, vy0)
     
     if excessEnergy > 0 then
         -- Trajectory is a hyperbolic sine.
-        local excess_vy = math.sqrt(2 * excessEnergy)
-        local vertexT = suborbitalTau * arcsinh(-orbital_y / (suborbitalTau * excess_vy))
+        local transition_vy = math.sqrt(2 * excessEnergy)
+        local vertexT = suborbitalTau * arcsinh(-orbital_y / (suborbitalTau * transition_vy))
         if vy0 < 0 then
             vertexT = -vertexT
         end
-        return vertexT, excess_vy, nil
+        return vertexT, transition_vy, nil
     else
         -- Trajectory is a hyperbolic cosine.
         
