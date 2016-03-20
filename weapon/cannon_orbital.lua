@@ -11,9 +11,10 @@ aimpointWeight = 0.5
 barrelLength = 16
 
 -- Don't fire beyond this range.
-maximumRange = 3000
+maximumRange = 10000
 
 -- Multiply step sizes by this factor. Should be between 0 and 1. Lower slows convergence but may help avoid overshooting.
+-- TODO: Better step size estimate.
 stepSizeGain = 0.5
 
 -- Terminate early if we are within this altitude of perfect aim.
@@ -121,8 +122,6 @@ function UpdateInfo()
     
     targetVelocity = (targetDerivatives[2] or Vector3.zero)
     targetVelocity = Vector3(targetVelocity.x - myVelocity.x, targetVelocity.y, targetVelocity.z - myVelocity.z)
-    
-    
 end
 
 function ControlWeapon(weaponIndex, weapon)
@@ -149,6 +148,7 @@ function ComputeAim(weapon)
     -- Assume barrel points directly towards target.
     local firePosition = Vector3.MoveTowards(weapon.GlobalPosition, target.AimPointPosition, barrelLength)
     
+    -- TODO: Consider air-suborbital-air trajectories.
     local t = Vector3.Distance(target.Position, firePosition) / weapon.Speed
     
     local vx, vy0, altitudeError, relativePosition
@@ -157,7 +157,7 @@ function ComputeAim(weapon)
         t = math.min(projectileLifetime, t)
         t = math.max(0, t)
         
-        local predictedPosition = PredictPosition(t)
+        local predictedPosition = PredictPosition(t) + targetAimpointOffset * aimpointWeight
         relativePosition = predictedPosition - firePosition
         local x = HorizontalMagnitude(relativePosition)
         vx = x / t
@@ -177,12 +177,13 @@ function ComputeAim(weapon)
             
             if math.abs(altitudeError) < altitudeTolerance then
                 -- Good enough.
-                break
+                -- LogBoth(string.format("horiz range: %0.1f, time: %0.1f, vel %0.1f, %0.1f, error %0.1f", HorizontalMagnitude(relativePosition), t, vx, vy0, altitudeError))
+                return Vector3(relativePosition.x, t * vy0, relativePosition.z)
             end
             
             local altitudeErrorDerivative = vy0 - targetVelocity.y
             
-            --LogBoth(string.format("%i: distance %f, t %f, predict alt %f, alt err %f, alt err deriv %f", i, relativePosition.magnitude, t, predictedPosition.y, altitudeError, altitudeErrorDerivative))
+            -- LogBoth(string.format("%i: distance %f, t %f, predict alt %f, alt err %f, alt err deriv %f", i, relativePosition.magnitude, t, predictedPosition.y, altitudeError, altitudeErrorDerivative))
             
             local newT = t - stepSizeGain * altitudeError / altitudeErrorDerivative
             
@@ -198,8 +199,8 @@ function ComputeAim(weapon)
         end
     end
     
-    --LogBoth(string.format("horiz range: %0.1f, time: %0.1f, vel %0.1f, %0.1f, error %0.1f", HorizontalMagnitude(relativePosition), t, vx, vy0, altitudeError))
-    return Vector3(relativePosition.x, t * vy0, relativePosition.z) + targetAimpointOffset * aimpointWeight
+    -- Couldn't find good enough aim.
+    return nil
 end
 
 function AltitudeAtTime(y0, vy0, t)
