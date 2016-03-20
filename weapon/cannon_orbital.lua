@@ -14,7 +14,6 @@ barrelLength = 16
 maximumRange = 10000
 
 -- Multiply step sizes by this factor. Should be between 0 and 1. Lower slows convergence but may help avoid overshooting.
--- TODO: Better step size estimate.
 stepSizeGain = 0.5
 
 -- Terminate early if we are within this altitude of perfect aim.
@@ -181,25 +180,32 @@ function ComputeAim(weapon)
                 return Vector3(relativePosition.x, t * vy0, relativePosition.z)
             end
             
-            local altitudeErrorDerivative = vy0 - targetVelocity.y
+            -- Change in range per flight time.
+            local xPerFlightTime = targetVelocity.x * relativePosition.normalized.x + targetVelocity.z * relativePosition.normalized.z
+            -- Change in vertical velocity per flight time, times the current flight time.
+            local vy0PerFlightTimeTimesFlightTime = (vx / vy0) * (vx - xPerFlightTime)
+            local altitudeErrorPerFlightTime = vy0PerFlightTimeTimesFlightTime + vy0 - targetVelocity.y
             
-            -- LogBoth(string.format("%i: distance %f, t %f, predict alt %f, alt err %f, alt err deriv %f", i, relativePosition.magnitude, t, predictedPosition.y, altitudeError, altitudeErrorDerivative))
+            -- LogBoth(string.format("%i: distance %f, t %f, predict alt %f, alt err %f, alt err deriv %f", i, relativePosition.magnitude, t, predictedPosition.y, altitudeError, altitudeErrorPerFlightTime))
             
-            local newT = t - stepSizeGain * altitudeError / altitudeErrorDerivative
+            local newT = t - stepSizeGain * altitudeError / altitudeErrorPerFlightTime
             
             if newT > projectileLifetime and t == projectileLifetime then
                 -- Projectile would despawn before reaching target.
+                -- LogBoth("Projectiles reach timeout!")
                 return nil
             end
 
             t = newT
         else
             -- Probably out of range.
+            -- LogBoth("Out of range!")
             return nil
         end
     end
     
     -- Couldn't find good enough aim.
+    -- LogBoth("Failed to aim!")
     return nil
 end
 
