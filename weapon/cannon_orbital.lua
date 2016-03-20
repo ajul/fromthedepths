@@ -8,10 +8,7 @@ predictionOrder = 2
 maximumRange = 3000
 
 -- How many iterations to run algorithm.
-iterationCount = 4
-
--- Altitude accuracy required to fire.
-altitudeTolerance = 1
+iterationCount = 8
 
 -- The I in Update(I).
 I = nil
@@ -142,7 +139,7 @@ function ComputeAim(weapon)
         local x = HorizontalMagnitude(relativePosition)
         vx = x / t
         
-        if (weapon.Speed >= vx) then
+        if weapon.Speed >= vx then
             vy0 = math.sqrt(weapon.Speed * weapon.Speed - vx * vx)
             
             -- If a flat shot would overfly the target, aim downwards.
@@ -150,24 +147,27 @@ function ComputeAim(weapon)
                 vy0 = -vy0
             end
             
-            -- Compute error derivative.
-            local horizontalRangeRate = relativeVelocity.x * relativePosition.normalized.x + relativeVelocity.z * relativePosition.normalized.z
-            local dvx_dt = (horizontalRangeRate - x / t) / t
-            
-            local altitudeErrorDerivative
-            
             altitudeError = AltitudeAtTime(weapon.GlobalPosition.y, vy0, t) - predictedPosition.y
-            altitudeErrorDerivative = -(vx / vy0) * dvx_dt * t - targetVelocity.y
             
-            LogBoth(string.format("%i: distance %f, predict alt %f, alt err %f, rangeRate %f, alt err deriv %f", 
-                    i, relativePosition.magnitude, predictedPosition.y, altitudeError, horizontalRangeRate, altitudeErrorDerivative))
-            t = t - 0.5 * altitudeError / altitudeErrorDerivative
+            local altitudeErrorDerivative = vy0 - targetVelocity.y
+            
+            -- LogBoth(string.format("%i: distance %f, t %f, predict alt %f, alt err %f, alt err deriv %f", i, relativePosition.magnitude, t, predictedPosition.y, altitudeError, altitudeErrorDerivative))
+            
+            local newT = t - altitudeError / altitudeErrorDerivative
+            
+            if newT > projectileLifetime and t == projectileLifetime then
+                -- Projectile would despawn before reaching target.
+                return nil
+            end
+
+            t = newT
         else
+            -- Probably out of range.
             return nil
         end
     end
     
-    LogBoth(string.format("horiz range: %0.1f, time: %0.1f, vel %0.1f, %0.1f, error %0.1f", HorizontalMagnitude(relativePosition), t, vx, vy0, altitudeError))
+    -- LogBoth(string.format("horiz range: %0.1f, time: %0.1f, vel %0.1f, %0.1f, error %0.1f", HorizontalMagnitude(relativePosition), t, vx, vy0, altitudeError))
     return Vector3(relativePosition.x, t * vy0, relativePosition.z)
 end
 
@@ -193,7 +193,7 @@ function AltitudeAtTime(y0, vy0, t)
         -- Suborbital segment.
         local vertexT, transition_vy, shortfallY = SuborbitalVertex(y0, vy0)
         
-        LogBoth(string.format("SuborbitalVertex(y0=%0.1f, vy0=%0.1f) -> vertexT=%0.1f, transition_vy=%0.1f, shortfallY=%0.1f", y0, vy0, vertexT, transition_vy, shortfallY or -1.0))
+        -- LogBoth(string.format("SuborbitalVertex(y0=%0.1f, vy0=%0.1f) -> vertexT=%0.1f, transition_vy=%0.1f, shortfallY=%0.1f", y0, vy0, vertexT, transition_vy, shortfallY or -1.0))
         
         if shortfallY == nil then
             -- Hyperbolic sine trajectory.
