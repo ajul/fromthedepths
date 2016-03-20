@@ -7,8 +7,11 @@ predictionOrder = 2
 -- Don't fire beyond this range.
 maximumRange = 3000
 
+-- Terminate early if we are within this altitude of perfect aim.
+altitudeTolerance = 1
+
 -- How many iterations to run algorithm.
-iterationCount = 8
+maxIterationCount = 8
 
 -- The I in Update(I).
 I = nil
@@ -18,16 +21,15 @@ frameTime = 0
 frameDuration = 1/40
 
 myPosition = Vector3.zero
+myVelocity = Vector3.zero
 
 -- Current target.
 target = nil
 
 -- Position, velocity, acceleration... of the current target.
 targetDerivatives = {}
-
+-- We use a frame that moves horizontally (but not vertically) with us.
 targetVelocity = Vector3.zero
--- Velocity is special because cannon projectiles inherit our velocity.
-relativeVelocity = Vector3.zero
 
 -- Constants.
 g = 9.81
@@ -66,6 +68,7 @@ function UpdateInfo()
     frameTime = newFrameTime
     
     myPosition = I:GetConstructPosition()
+    myVelocity = I:GetVelocityVector()
 
     -- Find a target. Prefer AIs with scores, and take the last AI otherwise.
     local newTarget = nil
@@ -100,7 +103,7 @@ function UpdateInfo()
     end
     
     targetVelocity = (targetDerivatives[2] or Vector3.zero)
-    relativeVelocity = targetVelocity - I:GetVelocityVector()
+    targetVelocity = Vector3(targetVelocity.x - myVelocity.x, targetVelocity.y, targetVelocity.z - myVelocity.z)
     
     target = newTarget
 end
@@ -116,7 +119,7 @@ end
 
 function PredictPosition(t)
     -- Predicted position of target after time t.
-    local result = targetDerivatives[1] + relativeVelocity * t
+    local result = targetDerivatives[1] + targetVelocity * t
     local timeFactor = t
     for i = 3, #targetDerivatives do
         timeFactor = timeFactor * t / (i - 1)
@@ -130,7 +133,7 @@ function ComputeAim(weapon)
     
     local vx, vy0, altitudeError, relativePosition
     
-    for i=1,iterationCount do
+    for i=1,maxIterationCount do
         t = math.min(projectileLifetime, t)
         t = math.max(0, t)
         
@@ -143,11 +146,19 @@ function ComputeAim(weapon)
             vy0 = math.sqrt(weapon.Speed * weapon.Speed - vx * vx)
             
             -- If a flat shot would overfly the target, aim downwards.
-            if AltitudeAtTime(weapon.GlobalPosition.y, 0.0, t) > predictedPosition.y then
+            if AltitudeAtTime(weapon.GlobalPosition.y, myVelocity.y, t) > predictedPosition.y then
                 vy0 = -vy0
             end
             
+            -- Add our vertical velocity.
+            vy0 = vy0 + myVelocity.y
+            
             altitudeError = AltitudeAtTime(weapon.GlobalPosition.y, vy0, t) - predictedPosition.y
+            
+            if altitudeError < altitudeTolerance then
+                -- Good enough.
+                break
+            end
             
             local altitudeErrorDerivative = vy0 - targetVelocity.y
             
@@ -312,7 +323,7 @@ function arcsinh(x)
 end
 
 function arccosh(x)
-    return math.log(x + math.sqrt(x*x - 1))
+    return math.log(math.abs(x) + math.sqrt(x*x - 1))
 end
 
 function LogBoth(s)
