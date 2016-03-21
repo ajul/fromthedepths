@@ -8,6 +8,7 @@ predictionOrder = 2
 aimpointWeight = 0.5
 
 -- Account for projectiles not being emitted from origin.
+turretHeight = 8
 barrelLength = 16
 
 -- Multiply step sizes by this factor. Should be between 0 and 1. Lower slows convergence but may help avoid overshooting.
@@ -53,6 +54,8 @@ projectileLifetime = 20
 
 -- Fake speed for missiles.
 missileSpeed = 100
+
+WEAPON_TYPE_TURRET = 4
 
 function Update(Iarg)
     I = Iarg
@@ -139,6 +142,10 @@ function ComputeAim(weapon)
     -- Assume barrel points directly towards target.
     local firePosition = Vector3.MoveTowards(weapon.GlobalPosition, target.AimPointPosition, barrelLength)
     
+    if weapon.WeaponType == WEAPON_TYPE_TURRET then
+        firePosition.y = firePosition.y + turretHeight
+    end
+    
     -- TODO: Consider air-suborbital-air trajectories.
     local t = Vector3.Distance(target.Position, firePosition) / weapon.Speed
     
@@ -167,51 +174,50 @@ function ComputeAim(weapon)
             vy0 = vy0 + myVelocity.y
             
             altitudeError = AltitudeAtTime(firePosition.y, vy0, t) - predictedPosition.y
+        
+            --LogBoth(string.format("Iteration %d: time %0.2f, error %0.1f", i, t, altitudeError))
+            
+            if altitudeError == nil then
+                return nil
+            end
+            
+            if math.abs(altitudeError) < altitudeTolerance then
+                -- Good enough.
+                return Vector3(relativePosition.x, t * vy0, relativePosition.z)
+            end
+            
+            -- Choose next t.
+            local nextT
+            local errorPerFlightTime
+            if previousT == nil then
+                -- Change in range per flight time.
+                local xPerFlightTime = targetVelocity.x * relativePosition.normalized.x + targetVelocity.z * relativePosition.normalized.z
+                local vy0tPerFlightTime = vx / vy0 * (vx - xPerFlightTime)
+                errorPerFlightTime = vy0tPerFlightTime + vy0 - targetVelocity.y
+            else
+                local errorDifference = altitudeError - previousAltitudeError
+                local timeDifference = t - previousT
+                errorPerFlightTime = errorDifference / timeDifference
+            end
+            
+            nextT = t - stepSizeGain * altitudeError / errorPerFlightTime
+            
+            if nextT >= projectileLifetime and t == projectileLifetime then
+                -- Projectile would despawn before hitting.
+                -- LogBoth("Out of projectile lifetime!")
+                return nil
+            end
+            
+            previousT = t
+            previousAltitudeError = altitudeError
+            
+            t = nextT
         else
-            -- Probably out of range.
-            return nil
+            t = x / weapon.Speed + frameDuration
         end
-        
-        local altitudeError, aim = AltitudeError(weapon, firePosition, t)
-        
-        -- LogBoth(string.format("Iteration %d: time %0.2f, error %0.1f", i, t, altitudeError))
-        
-        if altitudeError == nil then
-            return nil
-        end
-        
-        if math.abs(altitudeError) < altitudeTolerance then
-            -- Good enough.
-            return Vector3(relativePosition.x, t * vy0, relativePosition.z)
-        end
-        
-        -- Choose next t.
-        local nextT
-        local errorPerFlightTime
-        if previousT == nil then
-            -- Change in range per flight time.
-            local xPerFlightTime = targetVelocity.x * relativePosition.normalized.x + targetVelocity.z * relativePosition.normalized.z
-            local vy0tPerFlightTime = vx / vy0 * (vx - xPerFlightTime)
-            errorPerFlightTime = vy0tPerFlightTime + vy0 - targetVelocity.y
-        else
-            local errorDifference = altitudeError - previousAltitudeError
-            local timeDifference = t - previousT
-            errorPerFlightTime = errorDifference / timeDifference
-        end
-        
-        nextT = t - stepSizeGain * altitudeError / errorPerFlightTime
-        
-        if nextT >= projectileLifetime and t == projectileLifetime then
-            -- Projectile would despawn before hitting.
-            return nil
-        end
-        
-        previousT = t
-        previousAltitudeError = altitudeError
-        
-        t = nextT
     end
     
+    -- LogBoth("Failed to aim!")
     return nil
 end
 
@@ -255,9 +261,12 @@ function AltitudeAtTime(y0, vy0, t)
             else
                 -- Heading away from orbit.
                 local transitionT = suborbitalTau * arcsinh(suborbitalHeight / (suborbitalTau * transition_vy)) + vertexT
+                local transitionEnergy = 0.5 * transition_vy * transition_vy + suborbitalEnergy
+                local transitionVelocity = -math.sqrt(2 * transitionEnergy)
                 if t > transitionT then
                     -- We reach air.
-                    return AltitudeAtTime(suborbitalStart - altitudeEpsilon, -transition_vy, t - transitionT)
+                    --LogBoth(string.format("suborbital->air (vertical velocity %0.1f, segment time %0.2f)", transitionVelocity, transitionT))
+                    return AltitudeAtTime(suborbitalStart - altitudeEpsilon, transitionVelocity, t - transitionT)
                 else
                     -- Not enough time to reach air.
                     local timeSinceOrbital = t - vertexT
@@ -285,6 +294,7 @@ function AltitudeAtTime(y0, vy0, t)
             local suborbitalT = (orbitalStart - y0) / vy0
             if t > suborbitalT then
                 -- We enter suborbital.
+                --LogBoth(string.format("orbital->suborbital (vertical velocity %0.1f, segment time %0.2f)", vy0, suborbitalT))
                 return AltitudeAtTime(orbitalStart - altitudeEpsilon, vy0, t - suborbitalT)
             end
         end
@@ -325,6 +335,7 @@ function SuborbitalVertex(y0, vy0)
     
     if excessEnergy > 0 then
         -- Trajectory is a hyperbolic sine.
+        -- Velocity when exiting orbit.
         local transition_vy = math.sqrt(2 * excessEnergy)
         local vertexT = suborbitalTau * arcsinh(-orbital_y / (suborbitalTau * transition_vy))
         if vy0 < 0 then
