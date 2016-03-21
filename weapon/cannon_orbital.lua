@@ -10,9 +10,6 @@ aimpointWeight = 0.5
 -- Account for projectiles not being emitted from origin.
 barrelLength = 16
 
--- Don't fire beyond this range.
-maximumRange = 10000
-
 -- Multiply step sizes by this factor. Should be between 0 and 1. Lower slows convergence but may help avoid overshooting.
 stepSizeGain = 1.0
 
@@ -92,11 +89,6 @@ function UpdateInfo()
                 targetingMainframeIndex = mainframeIndex
             end 
         end
-    end
-    
-    -- Limit range.
-    if newTarget ~= nil and Vector3.Distance(newTarget.Position, myPosition) > maximumRange then
-        newTarget = nil
     end
 
     if newTarget ~= nil then
