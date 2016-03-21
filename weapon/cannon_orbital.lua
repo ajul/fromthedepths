@@ -335,7 +335,7 @@ function SuborbitalVertex(y0, vy0)
         -- Trajectory is a hyperbolic cosine.
         
         -- Velocity when dropping back into air.
-        local air_vy = math.sqrt(2.0 * (suborbitalEnergy + excessEnergy))
+        local transition_vy = math.sqrt(2.0 * (suborbitalEnergy + excessEnergy))
         -- How far short of orbit.
         local shortfallY = math.sqrt(-2.0 * excessEnergy * suborbitalHeight / g)
         local vertexY = orbitalStart - shortfallY
@@ -343,7 +343,7 @@ function SuborbitalVertex(y0, vy0)
         if vy0 < 0 then
             vertexT = -vertexT
         end
-        return vertexT, air_vy, shortfallY
+        return vertexT, transition_vy, shortfallY
     end
 end
 
