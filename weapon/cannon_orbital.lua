@@ -29,6 +29,7 @@ frameDuration = 1/40
 
 myPosition = Vector3.zero
 myVelocity = Vector3.zero
+myUpVector = Vector3.up
 
 -- Current target.
 target = nil
@@ -80,6 +81,7 @@ function UpdateInfo()
     
     myPosition = I:GetConstructPosition()
     myVelocity = I:GetVelocityVector()
+    myUpVector = I:GetConstructUpVector()
 
     -- Find a target. Prefer AIs with scores, and take the last AI otherwise.
     local newTarget = nil
@@ -143,7 +145,7 @@ function ComputeAim(weapon)
     local firePosition = Vector3.MoveTowards(weapon.GlobalPosition, target.AimPointPosition, barrelLength)
     
     if weapon.WeaponType == WEAPON_TYPE_TURRET then
-        firePosition.y = firePosition.y + turretHeight
+        firePosition = firePosition + myUpVector * turretHeight
     end
     
     -- TODO: Consider air-suborbital-air trajectories.
