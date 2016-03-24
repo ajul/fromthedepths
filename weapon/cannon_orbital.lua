@@ -148,7 +148,6 @@ function ComputeAim(weapon)
         firePosition = firePosition + myUpVector * turretHeight
     end
     
-    -- TODO: Consider air-suborbital-air trajectories.
     local t = Vector3.Distance(target.Position, firePosition) / weapon.Speed
     
     local previousT, previousAltitudeError
@@ -162,10 +161,8 @@ function ComputeAim(weapon)
         local x = HorizontalMagnitude(relativePosition)
         local vx = x / t
         
-        local vy0, altitudeError
-        
         if weapon.Speed >= vx then
-            vy0 = math.sqrt(weapon.Speed * weapon.Speed - vx * vx)
+            local vy0 = math.sqrt(weapon.Speed * weapon.Speed - vx * vx)
             
             -- If a flat shot would overfly the target, aim downwards.
             if AltitudeAtTime(firePosition.y, myVelocity.y, t) > predictedPosition.y then
@@ -175,9 +172,11 @@ function ComputeAim(weapon)
             -- Add our vertical velocity.
             vy0 = vy0 + myVelocity.y
             
-            altitudeError = AltitudeAtTime(firePosition.y, vy0, t) - predictedPosition.y
+            local altitudeAtTarget = AltitudeAtTime(firePosition.y, vy0, t)
+            
+            local altitudeError = altitudeAtTarget - predictedPosition.y
         
-            --LogBoth(string.format("Iteration %d: time %0.2f, error %0.1f", i, t, altitudeError))
+            -- LogBoth(string.format("Iteration %d: time %0.2f, error %0.1f", i, t, altitudeError))
             
             if altitudeError == nil then
                 return nil
@@ -192,10 +191,13 @@ function ComputeAim(weapon)
             local nextT
             local errorPerFlightTime
             if previousT == nil then
-                -- Change in range per flight time.
+                -- Change in horizontal range per flight time.
                 local xPerFlightTime = targetVelocity.x * relativePosition.normalized.x + targetVelocity.z * relativePosition.normalized.z
+                -- Change in altitude per flight time due to changes in initial vertical velocity due to changes in horizontal range.
                 local vy0tPerFlightTime = vx / vy0 * (vx - xPerFlightTime)
-                errorPerFlightTime = vy0tPerFlightTime + vy0 - targetVelocity.y
+                
+                local vyMean = (altitudeAtTarget - firePosition.y) / t
+                errorPerFlightTime = vy0tPerFlightTime + vyMean - targetVelocity.y
             else
                 local errorDifference = altitudeError - previousAltitudeError
                 local timeDifference = t - previousT
