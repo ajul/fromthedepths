@@ -188,7 +188,7 @@ function ComputeAim(weapon)
             
             if math.abs(altitudeError) < altitudeTolerance then
                 -- Good enough.
-                return Vector3(relativePosition.x, t * vy0, relativePosition.z)
+                return Vector3(relativePosition.x, (t + barrelLengthT) * vy0, relativePosition.z)
             end
             
             -- Choose next t.
