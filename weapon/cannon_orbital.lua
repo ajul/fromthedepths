@@ -141,14 +141,17 @@ function PredictPosition(t)
 end
 
 function ComputeAim(weapon)
-    -- Assume barrel points directly towards target.
-    local firePosition = Vector3.MoveTowards(weapon.GlobalPosition, target.AimPointPosition, barrelLength)
+
+    local firingPiecePosition = weapon.GlobalPosition
     
     if weapon.WeaponType == WEAPON_TYPE_TURRET then
-        firePosition = firePosition + myUpVector * turretHeight
+        firingPiecePosition = firingPiecePosition + myUpVector * turretHeight
     end
     
-    local t = Vector3.Distance(target.Position, firePosition) / weapon.Speed
+    -- We seem to lose a frame?
+    local barrelLengthT = barrelLength / weapon.Speed - 1/40
+    
+    local t = Vector3.Distance(target.Position, firingPiecePosition) / weapon.Speed
     
     local previousT, previousAltitudeError
     
@@ -157,22 +160,24 @@ function ComputeAim(weapon)
         t = math.max(0, t)
         
         local predictedPosition = PredictPosition(t) + targetAimpointOffset * aimpointWeight
-        local relativePosition = predictedPosition - firePosition
+        local relativePosition = predictedPosition - firingPiecePosition
         local x = HorizontalMagnitude(relativePosition)
-        local vx = x / t
+        local vx = x / (t + barrelLengthT)
         
         if weapon.Speed >= vx then
             local vy0 = math.sqrt(weapon.Speed * weapon.Speed - vx * vx)
             
-            -- If a flat shot would overfly the target, aim downwards.
-            if AltitudeAtTime(firePosition.y, myVelocity.y, t) > predictedPosition.y then
+            -- If a zero vertical velocity shot would overfly the target, aim downwards.
+            if AltitudeAtTime(firingPiecePosition.y, myVelocity.y, t) > predictedPosition.y then
                 vy0 = -vy0
             end
+            
+            local fireAltitude = firingPiecePosition.y + vy0 * barrelLengthT
             
             -- Add our vertical velocity.
             vy0 = vy0 + myVelocity.y
             
-            local altitudeAtTarget = AltitudeAtTime(firePosition.y, vy0, t)
+            local altitudeAtTarget = AltitudeAtTime(fireAltitude, vy0, t)
             
             local altitudeError = altitudeAtTarget - predictedPosition.y
         
@@ -196,7 +201,7 @@ function ComputeAim(weapon)
                 -- Change in altitude per flight time due to changes in initial vertical velocity due to changes in horizontal range.
                 local vy0tPerFlightTime = vx / vy0 * (vx - xPerFlightTime)
                 
-                local vyMean = (altitudeAtTarget - firePosition.y) / t
+                local vyMean = (altitudeAtTarget - fireAltitude) / t
                 errorPerFlightTime = vy0tPerFlightTime + vyMean - targetVelocity.y
             else
                 local errorDifference = altitudeError - previousAltitudeError
