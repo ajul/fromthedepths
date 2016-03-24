@@ -148,8 +148,7 @@ function ComputeAim(weapon)
         firingPiecePosition = firingPiecePosition + myUpVector * turretHeight
     end
     
-    -- We seem to lose a frame?
-    local barrelLengthT = barrelLength / weapon.Speed - 1/40
+    local barrelLengthT = barrelLength / weapon.Speed
     
     local t = Vector3.Distance(target.Position, firingPiecePosition) / weapon.Speed
     
