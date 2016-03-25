@@ -179,9 +179,14 @@ function ComputeAim(weapon)
     
     local previousT, previousAltitudeError
     
+    local triedMaxLifetime = false
+    
     for i=1,maxIterationCount do
-        t = math.min(projectileLifetime, t)
-        t = math.max(0, t)
+        if t >= projectileLifetime or t < 0 then
+            -- Either we need to clamp at max lifetime, or we made a huge jump---perhaps need to use suborbital.
+            t = projectileLifetime
+            triedMaxLifetime = true
+        end
         
         local predictedPosition = PredictPosition(t) + targetAimpointOffset * aimpointWeight
         local relativePosition = predictedPosition - firePoint
@@ -233,7 +238,7 @@ function ComputeAim(weapon)
             
             nextT = t - stepSizeGain * altitudeError / errorPerFlightTime
             
-            if nextT >= projectileLifetime and t == projectileLifetime then
+            if nextT >= projectileLifetime and triedMaxLifetime then
                 -- Projectile would despawn before hitting.
                 -- LogBoth("Out of projectile lifetime!")
                 return nil
@@ -307,6 +312,7 @@ function AltitudeAtTime(y0, vy0, t)
             end
         else
             -- Hyperbolic cosine trajectory.
+            -- LogBoth("Considering hyperbolic cosine!")
             local vertexToSuborbitalT = suborbitalTau * arccosh(suborbitalHeight / shortfallY)
             local transitionT = vertexToSuborbitalT + vertexT
             if t > transitionT then
@@ -356,6 +362,7 @@ end
 
 function SuborbitalVertex(y0, vy0)
     -- Returns time to vertex (may be negative), absolute velocity at transition, shortfall relative to orbit (only if not enough energy to reach orbit)
+    -- If shortfallY is nil, trajectory is hyperbolic sine. Otherwise trajectory is hyperbolic cosine.
 
     -- Altitude relative to orbital altitude.
     local orbital_y = y0 - orbitalStart
