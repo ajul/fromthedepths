@@ -7,6 +7,9 @@ predictionOrder = 2
 -- Aim this far towards the aim point offset.
 aimpointWeight = 0.5
 
+-- Whether to aim turret weapons independently. This costs an extra aim call per weapon but can be more accurate.
+controlTurretWeaponsIndependently = true
+
 -- Account for projectiles not being emitted from origin.
 turretHeight = 8
 barrelLength = 16
@@ -24,6 +27,7 @@ maxIterationCount = 16
 I = nil
 
 -- Time and duration of the current frame.
+nominalFrameDuration = 1/40
 frameTime = 0
 frameDuration = 1/40
 
@@ -68,7 +72,30 @@ function Update(Iarg)
             local weapon = I:GetWeaponInfo(weaponIndex)
             if ((weaponSlot == 0 or weapon.WeaponSlot == weaponSlot) and
                 weapon.Speed > 0 and weapon.Speed ~= missileSpeed) then
-                ControlWeapon(weaponIndex, weapon)
+                local aim = ComputeAim(weapon)
+                if aim ~= nil then
+                    if I:AimWeaponInDirection(weaponIndex, aim.x, aim.y, aim.z, weaponSlot) and not (controlTurretWeaponsIndependently and weapon.WeaponType == WEAPON_TYPE_TURRET) then
+                        I:FireWeapon(weaponIndex, weaponSlot)
+                    end
+                end
+            end
+        end
+        
+        if controlTurretWeaponsIndependently then
+            for turretSpinnerIndex = 0, I:GetTurretSpinnerCount() - 1 do
+                for weaponIndex = 0, I:GetWeaponCountOnTurretOrSpinner(turretSpinnerIndex) - 1 do
+                    local weapon = I:GetWeaponInfoOnTurretOrSpinner(turretSpinnerIndex, weaponIndex)
+                    if ((weaponSlot == 0 or weapon.WeaponSlot == weaponSlot) and
+                        weapon.Speed > 0 and weapon.Speed ~= missileSpeed) then
+                        local aim = ComputeAim(weapon)
+                        if aim ~= nil then
+                            if I:AimWeaponInDirectionOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, 
+                                                                       aim.x, aim.y, aim.z, weaponSlot) then
+                                I:FireWeaponOnTurretOrSpinner(turretSpinnerIndex, weaponIndex, weaponSlot)
+                            end
+                        end
+                    end
+                end
             end
         end
     end
@@ -120,10 +147,10 @@ function UpdateInfo()
     targetVelocity = Vector3(targetVelocity.x - myVelocity.x, targetVelocity.y, targetVelocity.z - myVelocity.z)
 end
 
-function ControlWeapon(weaponIndex, weapon)
+function ControlWeapon(weaponIndex, weapon, fireTurrets)
     local aim = ComputeAim(weapon)
     if aim ~= nil then
-        if I:AimWeaponInDirection(weaponIndex, aim.x, aim.y, aim.z, weaponSlot) then
+        if I:AimWeaponInDirection(weaponIndex, aim.x, aim.y, aim.z, weaponSlot) and (fireTurrets or not weapon.WeaponType == WEAPON_TYPE_TURRET) then
             I:FireWeapon(weaponIndex, weaponSlot)
         end
     end
@@ -142,15 +169,13 @@ end
 
 function ComputeAim(weapon)
 
-    local firingPiecePosition = weapon.GlobalPosition
+    local firePoint = weapon.GlobalPosition + weapon.CurrentDirection * barrelLength
     
     if weapon.WeaponType == WEAPON_TYPE_TURRET then
-        firingPiecePosition = firingPiecePosition + myUpVector * turretHeight
+        firePoint = firePoint + myUpVector * turretHeight
     end
     
-    local barrelLengthT = barrelLength / weapon.Speed
-    
-    local t = Vector3.Distance(target.Position, firingPiecePosition) / weapon.Speed
+    local t = Vector3.Distance(target.Position, firePoint) / weapon.Speed
     
     local previousT, previousAltitudeError
     
@@ -159,24 +184,22 @@ function ComputeAim(weapon)
         t = math.max(0, t)
         
         local predictedPosition = PredictPosition(t) + targetAimpointOffset * aimpointWeight
-        local relativePosition = predictedPosition - firingPiecePosition
+        local relativePosition = predictedPosition - firePoint
         local x = HorizontalMagnitude(relativePosition)
-        local vx = x / (t + barrelLengthT)
+        local vx = x / t
         
         if weapon.Speed >= vx then
             local vy0 = math.sqrt(weapon.Speed * weapon.Speed - vx * vx)
+            local vy_base = myVelocity.y - GravityAtAltitude(firePoint.y) * nominalFrameDuration
             
             -- If a zero vertical velocity shot would overfly the target, aim downwards.
-            if AltitudeAtTime(firingPiecePosition.y, myVelocity.y, t) > predictedPosition.y then
+            if AltitudeAtTime(firePoint.y, vy_base, t) > predictedPosition.y then
                 vy0 = -vy0
             end
             
-            local fireAltitude = firingPiecePosition.y + vy0 * barrelLengthT
+            local fireAltitude = firePoint.y
             
-            -- Add our vertical velocity.
-            vy0 = vy0 + myVelocity.y
-            
-            local altitudeAtTarget = AltitudeAtTime(fireAltitude, vy0, t)
+            local altitudeAtTarget = AltitudeAtTime(fireAltitude, vy0 + vy_base, t)
             
             local altitudeError = altitudeAtTarget - predictedPosition.y
         
@@ -188,7 +211,7 @@ function ComputeAim(weapon)
             
             if math.abs(altitudeError) < altitudeTolerance then
                 -- Good enough.
-                return Vector3(relativePosition.x, (t + barrelLengthT) * vy0, relativePosition.z)
+                return Vector3(relativePosition.x, t * vy0, relativePosition.z)
             end
             
             -- Choose next t.
@@ -363,6 +386,16 @@ function SuborbitalVertex(y0, vy0)
             vertexT = -vertexT
         end
         return vertexT, transition_vy, shortfallY
+    end
+end
+
+function GravityAtAltitude(y)
+    if y <= suborbitalStart then
+        return g
+    elseif y <= orbitalStart then
+        return g * (orbitalStart - y) / suborbitalHeight
+    else
+        return 0
     end
 end
 
