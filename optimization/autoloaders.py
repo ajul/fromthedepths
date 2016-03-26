@@ -1,7 +1,9 @@
 import math
 
+# time is measured in feed times
+
 rpCosts = {
-    'base' : 15000,
+    'base' : 10000,
     'clip' : 170,
     'feeder' : 200,
     'loader' : 680,
@@ -36,6 +38,7 @@ massCosts = {
     }
 
 # clipsPerLoader, feedersPerLoader
+# negative clips = belt-fed
 configurations = [
     (-1, 2),
     (-1, 3),
@@ -43,6 +46,7 @@ configurations = [
     (-1, 5),
     (-1, 6),
     (0, 1),
+    (0, 2),
     (1, 2),
     (1, 1),
     (2, 2),
@@ -66,29 +70,30 @@ def computeLoaderCost(loaders, clipsPerLoader, feedersPerLoader, blockCosts):
                 blockCosts['feeder'] * feedersPerLoader)
     return unitCost * loaders
 
-def computeRateOfFire(loaders, clipsPerLoader, feedersPerLoader):
+def computeRateOfFire(loaders, clipsPerLoader, feedersPerLoader, loaderLength):
     if clipsPerLoader >= 0:
         feederRate = loaders * feedersPerLoader
-        loaderRate = 2 * computeLoaderClipMult(clipsPerLoader) * loaders ** 0.75
+        loaderRate = 2 * computeLoaderClipMult(clipsPerLoader) * loaders ** 0.75 * math.sqrt(loaderLength)
         return min(feederRate, loaderRate)
     else:
         feedTime = 1 / feedersPerLoader
         loadTime = 0.1 * loaders ** 0.25
-        return loaders / (feedTime + loadTime)
+        return loaders / (feedTime + loadTime) * math.sqrt(loaderLength)
 
 def computeScore(loaders, clipsPerLoader, feedersPerLoader, blockCosts):
     totalCost = blockCosts['base'] + computeLoaderCost(loaders, clipsPerLoader, feedersPerLoader, blockCosts)
     rateOfFire = computeRateOfFire(loaders, clipsPerLoader, feedersPerLoader)
     return blockCosts['base'] * rateOfFire / totalCost
     
-def optimize(blockCosts):
+def optimize(blockCosts, loaderLength):
     for clipsPerLoader, feedersPerLoader in configurations:
+        if loaderLength > 1 and clipsPerLoader < 0: continue
         prevScore = 0
         prevTotalCost = 0
         prevRateOfFire = 0
         for loaders in range(400):
             totalCost = blockCosts['base'] + computeLoaderCost(loaders, clipsPerLoader, feedersPerLoader, blockCosts)
-            rateOfFire = computeRateOfFire(loaders, clipsPerLoader, feedersPerLoader)
+            rateOfFire = computeRateOfFire(loaders, clipsPerLoader, feedersPerLoader, loaderLength)
             score = blockCosts['base'] * rateOfFire / totalCost
             # concave down
             if score < prevScore:
@@ -100,4 +105,4 @@ def optimize(blockCosts):
             prevTotalCost = totalCost
             prevRateOfFire = rateOfFire
 
-optimize(rpCosts2)
+optimize(rpCosts, 1)
