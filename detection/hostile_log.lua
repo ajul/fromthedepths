@@ -92,7 +92,7 @@ function LogClosestTarget()
         blockCountString = ''
     end
     
-    local message = string.format([[Hostile %s%s %d o'clock, distance %d m, altitude %d m]], 
+    local message = string.format([[%s%s %d o'clock, distance %d m, altitude %d m]], 
                             teamsByID[logTarget.Team] or 'unknown team',
                             blockCountString,
                             oclock, 
@@ -121,7 +121,7 @@ function LogClosestResourceZone()
     
     local oclock = ComputeOClock(closestRelativePosition)
     local resourcesRemaining = MaxResourcesRemaining(closestResourceZone.Resources)
-    local message = string.format([[Resource zone at %d o'clock, distance %d m, %d max resources, %d zone(s) total]], 
+    local message = string.format([[Resource zone %d o'clock, distance %d m, %d max resources, %d zone(s) total]], 
                                   oclock, 
                                   closestRelativePosition.magnitude, 
                                   resourcesRemaining, 
