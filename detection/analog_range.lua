@@ -4,7 +4,7 @@
 -- Which weapon slot to use.
 weaponSlot = 5
 
--- Range at top of scale.
+-- Range at extremes of gauge.
 minRange = 1000
 maxRange = 5000
 
