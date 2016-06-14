@@ -1,4 +1,7 @@
--- Which weapon slot to use. Pointer should be an unloaded advanced cannon on a turret.
+-- Points a turret so that it acts as a range gauge.
+-- Pointer should be a bare turret, or an unloaded advanced cannon on a turret.
+
+-- Which weapon slot to use.
 weaponSlot = 5
 
 -- Range at top of scale.
