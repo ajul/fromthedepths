@@ -12,12 +12,6 @@ maxRange = 5000
 minAngle = 135
 maxAngle = 45
 
-myVectors = {
-    x = Vector3.right,
-    y = Vector3.up,
-    z = Vector3.forward,
-}
-
 currentTarget = nil
 
 WEAPON_TYPE_TURRET = 4
