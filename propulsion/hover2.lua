@@ -1,6 +1,6 @@
 -- Desired altitudes.
-desiredASL = 300 -- from bottom of hull
-desiredAGL = 100
+desiredASL = 10 -- from bottom of hull
+desiredAGL = 10
 
 desiredPitch = 0
 desiredRoll = 0
@@ -65,19 +65,22 @@ myRoll = 0
 frameTime = 0
 frameDuration = 1/40
 
-firstRun = true
-state = nil
-
 AXES = {'x', 'y', 'z'}
 
 function Update(Iarg)
     I = Iarg
     UpdateInfo()
-    ChooseState()
+    UpdateAltitude()
     
     for spinnerIndex = 0, I:GetSpinnerCount() - 1 do
         if I:IsSpinnerDedicatedHelispinner(spinnerIndex) then
-            state(spinnerIndex)
+            local spinner = I:GetSpinnerInfo(spinnerIndex)
+            local pitchQuadrant, rollQuadrant = ComQuadrantPitchRoll(spinner.Position)
+            
+            local spinnerTotalThrottle = altitudePID.MV - pitchPID.MV * pitchQuadrant + rollPID.MV * rollQuadrant
+            I:SetSpinnerContinuousSpeed(spinnerIndex, spinnerTotalThrottle * 30)
+            I:SetSpinnerPowerDrive(spinnerIndex, 10)
+            I:SetDedicatedHelispinnerUpFraction(spinnerIndex, 1)
         end
     end
 end
@@ -111,36 +114,29 @@ function UpdateInfo()
     myLocalAngularVelocity = I:GetLocalAngularVelocity()
 end
 
-function ChooseState()
-    if firstRun then
-        firstRun = false
-        state = StateInit
-    else
-        local terrainAltitude = I:GetTerrainAltitudeForLocalPosition(Vector3.zero)
-        local lookaheadTerrainAltitude = I:GetTerrainAltitudeForPosition(myPosition + myVelocity * collisionAvoidanceTime)
-        local desiredAltitude = math.max(desiredASL, math.max(terrainAltitude, lookaheadTerrainAltitude) + desiredAGL)
-        desiredAltitude = math.max(desiredAltitude, CollisionAvoidanceAltitude())
-        local currentAltitude = myPosition.y + GetLowestPointOffset()
-        
-        local maxMV = 1
-        
-        UpdatePID(altitudePID, desiredAltitude, currentAltitude, myVelocity.y, maxMV)
-        
-        -- maxMV = 1 - math.abs(altitudePID.MV)
-        UpdatePID(pitchPID, desiredPitch, myPitch, math.deg(myLocalAngularVelocity.x), maxMV)
-        
-        maxMV = maxMV - math.abs(pitchPID.MV)
-        
-        local pitchCos = math.cos(math.rad(myPitch))
-        UpdatePID(rollPID, desiredRoll, myRoll * pitchCos, math.deg(myLocalAngularVelocity.z) * pitchCos, maxMV)
-        
-        -- LogBoth(string.format("Pitch: %0.2f, Roll: %0.2f", myPitch, myRoll))
-        -- LogBoth(string.format("Lowest offset: %0.2f", GetLowestPointOffset()))
-        -- LogBoth(string.format("Altitude: PV %0.2f, MV %0.2f, EMA %0.2f", currentAltitude, altitudePID.MV, altitudePID.EMA))
-        -- LogBoth(string.format("MVs: %0.2f, %0.2f, %0.2f", altitudePID.MV, pitchPID.MV, rollPID.MV))
-        
-        state = StateMain
-    end
+function UpdateAltitude()
+    local terrainAltitude = I:GetTerrainAltitudeForLocalPosition(Vector3.zero)
+    local lookaheadTerrainAltitude = I:GetTerrainAltitudeForPosition(myPosition + myVelocity * collisionAvoidanceTime)
+    local desiredAltitude = math.max(desiredASL, math.max(terrainAltitude, lookaheadTerrainAltitude) + desiredAGL)
+    desiredAltitude = math.max(desiredAltitude, CollisionAvoidanceAltitude())
+    local currentAltitude = myPosition.y + GetLowestPointOffset()
+    
+    local maxMV = 1
+    
+    UpdatePID(altitudePID, desiredAltitude, currentAltitude, myVelocity.y, maxMV)
+    
+    -- maxMV = 1 - math.abs(altitudePID.MV)
+    UpdatePID(pitchPID, desiredPitch, myPitch, math.deg(myLocalAngularVelocity.x), maxMV)
+    
+    maxMV = maxMV - math.abs(pitchPID.MV)
+    
+    local pitchCos = math.cos(math.rad(myPitch))
+    UpdatePID(rollPID, desiredRoll, myRoll * pitchCos, math.deg(myLocalAngularVelocity.z) * pitchCos, maxMV)
+    
+    -- LogBoth(string.format("Pitch: %0.2f, Roll: %0.2f", myPitch, myRoll))
+    -- LogBoth(string.format("Lowest offset: %0.2f", GetLowestPointOffset()))
+    -- LogBoth(string.format("Altitude: PV %0.2f, MV %0.2f, EMA %0.2f", currentAltitude, altitudePID.MV, altitudePID.EMA))
+    -- LogBoth(string.format("MVs: %0.2f, %0.2f, %0.2f", altitudePID.MV, pitchPID.MV, rollPID.MV))
 end
 
 function CollisionAvoidanceAltitude()
@@ -196,19 +192,6 @@ function UpdatePID(pid, setPoint, PV, derivative, maxAbs)
     pid.MV = ClipAbs(pid.MV, maxAbs)
     local emaWeight = frameDuration / pid.I
     pid.EMA = pid.EMA * (1 - emaWeight) + pid.MV * emaWeight
-end
-
-function StateInit(spinnerIndex)
-    I:SetSpinnerPowerDrive(spinnerIndex, 10)
-    I:SetDedicatedHelispinnerUpFraction(spinnerIndex, 1)
-end
-
-function StateMain(spinnerIndex)
-    local spinner = I:GetSpinnerInfo(spinnerIndex)
-    local pitchQuadrant, rollQuadrant = ComQuadrantPitchRoll(spinner.Position)
-    
-    local spinnerTotalThrottle = altitudePID.MV - pitchPID.MV * pitchQuadrant + rollPID.MV * rollQuadrant
-    I:SetSpinnerContinuousSpeed(spinnerIndex, spinnerTotalThrottle * 30)
 end
 
 function ComQuadrantPitchRoll(position)
