@@ -2,6 +2,9 @@
 desiredASL = 10 -- from bottom of hull
 desiredAGL = 10
 
+minDesiredASL = 10
+maxDesiredASL = 400
+
 desiredPitch = 0
 desiredRoll = 0
 
@@ -117,6 +120,16 @@ function UpdateInfo()
 end
 
 function UpdateAltitude()
+    if I:Component_GetCount(COMPONENT_TYPE_HYDROFOIL) > 0 then
+        local hydrofoilAngle = I:Component_GetFloatLogic(COMPONENT_TYPE_HYDROFOIL, 0)
+        local hydrofoilFraction = hydrofoilAngle / 90 + 0.5
+        local newDesiredASL = (maxDesiredASL - minDesiredASL) * hydrofoilFraction + minDesiredASL
+        if math.abs(newDesiredASL - desiredASL) >= 1.0 then
+            desiredASL = newDesiredASL
+            LogBoth(string.format('Target altitude %d', newDesiredASL))
+        end
+    end
+
     local terrainAltitude = I:GetTerrainAltitudeForLocalPosition(Vector3.zero)
     local lookaheadTerrainAltitude = I:GetTerrainAltitudeForPosition(myPosition + myVelocity * collisionAvoidanceTime)
     local desiredAltitude = math.max(desiredASL, math.max(terrainAltitude, lookaheadTerrainAltitude) + desiredAGL)
