@@ -10,10 +10,24 @@ rpCosts = {
     }
 
 rpCosts2 = {
-    'base' : 40000,
+    'base' : 15000,
     'clip' : 300,
     'feeder' : 200,
     'loader' : 860,
+    }
+
+rpCosts4 = {
+    'base' : 20000,
+    'clip' : 430,
+    'feeder' : 200,
+    'loader' : 1050,
+    }
+
+rpCosts8 = {
+    'base' : 25000,
+    'clip' : 560,
+    'feeder' : 200,
+    'loader' : 1280,
     }
 
 blockCountCosts = {
@@ -51,8 +65,12 @@ configurations = [
     (1, 1),
     (2, 2),
     (2, 1),
+    (3, 3),
     (3, 2),
     #(3, 1), # too large
+    (4, 6),
+    (4, 5),
+    (4, 4),
     (4, 3),
     (4, 2),
     #(4, 1), # too large
@@ -85,7 +103,10 @@ def computeScore(loaders, clipsPerLoader, feedersPerLoader, blockCosts):
     rateOfFire = computeRateOfFire(loaders, clipsPerLoader, feedersPerLoader)
     return blockCosts['base'] * rateOfFire / totalCost
     
-def optimize(blockCosts, loaderLength):
+def optimize(blockCosts, loaderLength, maxCost = None):
+    directFeedCost = blockCosts['base'] + 4 * blockCosts['feeder']
+    directFeedScore = 4 / directFeedCost
+    print('Direct feed cost: %d' % directFeedCost)
     for clipsPerLoader, feedersPerLoader in configurations:
         if loaderLength > 1 and clipsPerLoader < 0: continue
         prevScore = 0
@@ -94,9 +115,9 @@ def optimize(blockCosts, loaderLength):
         for loaders in range(400):
             totalCost = blockCosts['base'] + computeLoaderCost(loaders, clipsPerLoader, feedersPerLoader, blockCosts)
             rateOfFire = computeRateOfFire(loaders, clipsPerLoader, feedersPerLoader, loaderLength)
-            score = blockCosts['base'] * rateOfFire / totalCost
+            score = rateOfFire / totalCost / directFeedScore
             # concave down
-            if score < prevScore:
+            if score < prevScore or (maxCost is not None and totalCost > maxCost):
                 s = 'Configuration: %3d loaders with %d clips and %d feeder(s) each\n' % (loaders - 1, clipsPerLoader, feedersPerLoader)
                 s += 'Rate of fire %6.2f / cost %6d = score %6.2f \n' % (prevRateOfFire, prevTotalCost, prevScore)
                 print(s)
@@ -105,4 +126,4 @@ def optimize(blockCosts, loaderLength):
             prevTotalCost = totalCost
             prevRateOfFire = rateOfFire
 
-optimize(rpCosts, 1)
+optimize(rpCosts8, 8)
