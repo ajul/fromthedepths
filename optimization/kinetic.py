@@ -51,7 +51,7 @@ def computeKineticDamage(shellModules, propellantCount, gauge):
     return (1.25 *
             kineticModifier(shellModules) *
             computeMuzzleVelocity(shellModules, propellantCount, gauge) *
-            math.sqrt(len((shellModules)) * (gauge / 0.2)**3.0)
+            (len(shellModules) * (gauge / 0.2)**3.0) ** 0.65
             )
 
 def computeAP(shellModules, propellantCount, gauge):
@@ -76,10 +76,10 @@ modules = {
     'base_graviton_ram' : Module('Base, Graviton Ram', 0.9, 0.5, 1.0),
 }
 
-maxModuleCount = 12 # 8 = 125 mm
-testGauge = 1.0 / maxModuleCount
+maxModuleCount = 14 # 8 = 125 mm
+testGauge = 0.15
 # testGauge = 0.225
-testArmour = 18
+testArmour = 15
 
 # kinetic has better weight at rear relative to ap
 def sabotFirstBodiesIterator(bodyCount):
@@ -113,7 +113,7 @@ gravitonRamBases = [
 def testShellsIterator(maxBodyCount):
     for head in [
         ['head_ap'],
-        ['head_composite'],
+        #['head_composite'],
         ['head_sabot'],
         #['head_hollow_point'],
         ]:
@@ -130,7 +130,7 @@ def computeScore(shellModules, propellantCount, gauge = testGauge, armour = test
     ap = computeAP(shellModules, propellantCount, gauge)
     netDamage = kd * computePenetrationFactor(ap, armour)
     ammoCost = computeAmmoCost(shellModules, propellantCount, gauge)
-    return ap * netDamage / ammoCost
+    return vel * netDamage / ammoCost
 
 propellantCounts = {}
 bestScoreOverall = 0.0
@@ -178,4 +178,4 @@ for shell in testShellsIterator(16):
 print('-' * 64)
 print('Grand champion: %s + %d propellants (%0.2f)' % (bestShellOverall, propellantCounts[bestShellOverall], bestScoreOverall))
 
-# findings: head_ap, body_sabot, body_sabot or base_bleeder, 5 or 7 propellants
+# findings: sabot, sabot, solid, 7 propellants (5 at 125 mm)

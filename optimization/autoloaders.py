@@ -2,6 +2,8 @@ import math
 
 # time is measured in feed times
 
+# ejector costs 580
+
 rpCosts = {
     'base' : 10000,
     'clip' : 170,
@@ -24,7 +26,7 @@ rpCosts4 = {
     }
 
 rpCosts8 = {
-    'base' : 25000,
+    'base' : 30000,
     'clip' : 560,
     'feeder' : 200,
     'loader' : 1280,
