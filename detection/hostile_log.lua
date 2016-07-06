@@ -35,8 +35,9 @@ function Update(Iarg)
     
     myPosition = I:GetConstructPosition()
     myYaw = I:GetConstructYaw()
-
-    local _ = LogClosestTarget() or LogClosestResourceZone() or LogDefault()
+    
+    LogResourceZone()
+    LogClosestTarget()
 end
 
 function LogBoth(message)
@@ -92,40 +93,49 @@ function LogClosestTarget()
         blockCountString = ''
     end
     
-    local message = string.format([[%s%s %d o'clock, distance %d m, altitude %d m]], 
+    local message = string.format([[%s%s %d o'clock, distance %d m, altitude %d m, %d bogeys total]], 
                             teamsByID[logTarget.Team] or 'unknown team',
                             blockCountString,
                             oclock, 
                             logTargetRelativePosition.magnitude, 
-                            logTargetRelativePosition.y
+                            logTarget.Position.y,
+                            I:GetNumberOfTargets(mainframeToUse)
                             )
     LogBoth(message)
     return true
 end
 
-function LogClosestResourceZone()
-    local closestResourceZone = nil
-    local closestRelativePosition = nil
+function LogResourceZone()
+    local bestResourceZone = nil
+    local bestRelativePosition = nil
+    local bestScore = nil
+    local resourceZoneCount = 0
     
     for index, resourceZone in pairs(I.ResourceZones) do
-        local relativePosition = resourceZone.Position - myPosition
-        if closestResourceZone == nil or relativePosition.magnitude < closestRelativePosition.magnitude then
-            closestResourceZone = resourceZone
-            closestRelativePosition = relativePosition
+        local resourcesRemaining = MetalScrapRemaining(resourceZone.Resources)
+        if resourcesRemaining > 0 then
+            resourceZoneCount = resourceZoneCount + 1
+            local relativePosition = resourceZone.Position - myPosition
+            local score = resourcesRemaining / math.max(relativePosition.magnitude, 100.0)
+            if bestResourceZone == nil or score > bestScore then
+                bestResourceZone = resourceZone
+                bestRelativePosition = relativePosition
+                bestScore = score
+            end
         end
     end
     
-    if closestResourceZone == nil then
+    if bestResourceZone == nil then
         return false
     end
     
-    local oclock = ComputeOClock(closestRelativePosition)
-    local resourcesRemaining = MaxResourcesRemaining(closestResourceZone.Resources)
-    local message = string.format([[Resource zone %d o'clock, distance %d m, %d max resources, %d zone(s) total]], 
+    local oclock = ComputeOClock(bestRelativePosition)
+    local resourcesRemaining = MetalScrapRemaining(bestResourceZone.Resources)
+    local message = string.format([[Resource zone %d o'clock, distance %d m, %d metal + scrap, %d zone(s) total]], 
                                   oclock, 
-                                  closestRelativePosition.magnitude, 
+                                  bestRelativePosition.magnitude, 
                                   resourcesRemaining, 
-                                  #I.ResourceZones)
+                                  resourceZoneCount)
     LogBoth(message)
     return true
 end
@@ -136,11 +146,15 @@ function LogDefault()
     return true
 end
 
+function MetalScrapRemaining(resources)
+    return resources.MetalTotal + resources.ScrapTotal
+end
+
 function MaxResourcesRemaining(resources)
     local result = math.max(resources.NaturalTotal, resources.MetalTotal)
     result = math.max(result, resources.OilTotal)
     result = math.max(result, resources.ScrapTotal)
-    result = math.max(result, resources.CrystalTotal)
+    -- result = math.max(result, resources.CrystalTotal)
     return result
 end
 

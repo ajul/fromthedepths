@@ -53,7 +53,7 @@ class KineticCartridge():
             for i in range(3 - self.shellModuleCount()): yield MODULES['null']
 
     def statString(self):
-        return '%0.1f speed, %0.1f kinetic, %0.1f ap, %0.1f ammo, %0.1f burn length' % (
+        return '%0.1f speed, %0.1f kinetic, %0.1f ap, %0.1f ammo, %0.2f burn length' % (
             self.speed(), self.kinetic(), self.ap(), self.ammo(), self.burnLength())
 
     def moduleString(self):
@@ -153,14 +153,17 @@ def makeScoreFunction(speedPower = 1.0,
         return damage * cartridge.speed() ** speedPower * cartridge.ap() ** apPower / cartridge.ammo()
     return result
 
-def bodyPropellantIterator(gauge, head, base, maxModuleCount, scoreFunction):
-    for sabots in range(maxModuleCount):
-        for solids in range(maxModuleCount):
-            for propellants in range(maxModuleCount):
+def bodyPropellantIterator(gauge, head, base, maxShellModuleCount, scoreFunction):
+    maxBodyModuleCount = maxShellModuleCount - len(head) - len(base)
+    for sabots in range(maxBodyModuleCount + 1):
+        for solids in range(maxBodyModuleCount + 1 - sabots):
+            for propellants in range(50):
                 cartridge = KineticCartridge(gauge, head, sabots, solids, base, propellants)
-                if cartridge.length() > 8: continue
+                if cartridge.length() > 8.0: break
+                if cartridge.shellModuleCount() > maxShellModuleCount: break
+                if propellants > cartridge.shellModuleCount() * 4.0: break
                 if not cartridge.hasEvenModuleCount(): continue
-                if cartridge.moduleCount() > maxModuleCount: continue
+                
                 yield cartridge
 
 standardHeads = [
@@ -178,13 +181,13 @@ standardBases = [
     [MODULES['base_bleeder']],
     ]
 
-scoreFunction = makeScoreFunction(speedPower = 1.0, armour = 10.0)
+scoreFunction = makeScoreFunction(speedPower = 1.0, armour = 18.0)
 
 for gauge in [0.15]:
     for head in standardHeads:
         for base in standardBases:
             score, cartridge = max((scoreFunction(cartridge), cartridge)
-                                   for cartridge in bodyPropellantIterator(gauge, head, base, 50, scoreFunction))
+                                   for cartridge in bodyPropellantIterator(gauge, head, base, 4, scoreFunction))
             print('----')
             print('%d' % score)
             print(cartridge.statString())

@@ -21,7 +21,26 @@ componentCosts = {
         'feeder' : 200,
         'ejector' : 580,
         },
-    # other cost metrics?
+    'ms' : {
+        'autoloader' : {
+            1 : 170,
+            2 : 210,
+            3 : 230,
+            4 : 250,
+            6 : 270,
+            8 : 290,
+            },
+        'clip' : {
+            1 : 40,
+            2 : 70,
+            3 : 85,
+            4 : 100,
+            6 : 115,
+            8 : 130,
+            },
+        'feeder' : 30,
+        'ejector' : 130,
+        },
     }
 
 scaleLetters = {
@@ -36,10 +55,15 @@ class Magazine():
 
     def cost(self, costType, **kwargs):
         raise NotImplementedError()
-
+    
     def optimisationIterator(self):
         # yield **kwargs to consider
         raise NotImplementedError()
+
+    def totalCost(self, costType, extraCostFunction, **kwargs):
+        fireRate = self.fireRate(**kwargs)
+        cost = self.cost(costType, **kwargs)
+        return cost + extraCostFunction(fireRate)
 
     def score(self, costType, extraCostFunction, **kwargs):
         fireRate = self.fireRate(**kwargs)
@@ -47,15 +71,16 @@ class Magazine():
         totalCost = cost + extraCostFunction(fireRate)
         return fireRate / totalCost
 
-    def optimise(self, costType, extraCostFunction):
+    def optimise(self, costType, extraCostFunction, maxCost = None):
         # costFunction should be a function of the fire rate
         return max(
             (self.score(costType, extraCostFunction, **kwargs), kwargs)
             for kwargs in self.optimisationIterator()
+            if maxCost is None or self.totalCost(costType, extraCostFunction, **kwargs) <= maxCost
             )
 
-    def printOptimal(self, costType, extraCostFunction, scaleLetter = ''):
-        score, kwargs = self.optimise(costType, extraCostFunction)
+    def printOptimal(self, costType, extraCostFunction, scaleLetter = '', maxCost = None):
+        score, kwargs = self.optimise(costType, extraCostFunction, maxCost)
         fireRate = self.fireRate(**kwargs)
         cost = self.cost(costType, **kwargs)
         totalCost = cost + extraCostFunction(fireRate)
@@ -72,10 +97,11 @@ class Magazine():
         print(str(self) + kwargString + scoreString)
 
 class ConventionalMagazine(Magazine):
-    def __init__(self, length=1, clipRatio=1, useEjectors=False):
+    def __init__(self, length=1, clipRatio=1, useEjectors=False, maxFillRate=None):
         self.length = length
         self.clipRatio = clipRatio
         self.useEjectors = useEjectors
+        self.maxFillRate = maxFillRate
 
     def loadRate(self, autoloaderCount, feederRatio):
         if self.clipRatio > 0:
@@ -87,7 +113,12 @@ class ConventionalMagazine(Magazine):
         return feederRatio * autoloaderCount
 
     def fireRate(self, **kwargs):
-        return min(self.loadRate(**kwargs), self.feedRate(**kwargs))
+        loadRate = self.loadRate(**kwargs)
+        feedRate = self.feedRate(**kwargs)
+        if self.maxFillRate is None:
+            return min(loadRate, feedRate)
+        else:
+            return feedRate if feedRate <= maxFillRate * loadRate else 0.1
 
     def costPerAutoloader(self, costType, feederRatio):
         return (
@@ -147,22 +178,28 @@ class DirectfedMagazine(Magazine):
     def __str__(self):
         return 'Directfed: %d feeder ratio\n' % self.feederRatio
 
+maxFillRate = None
+
 magazinesToConsider = [
     DirectfedMagazine(4),
     BeltfedMagazine(length=1, clipRatio=1, useEjectors=True),
     ConventionalMagazine(length=8, clipRatio=0, useEjectors=True),
-    ConventionalMagazine(length=8, clipRatio=2, useEjectors=True),
-    ConventionalMagazine(length=8, clipRatio=4, useEjectors=True),
+    ConventionalMagazine(length=8, clipRatio=2, useEjectors=True, maxFillRate=maxFillRate),
+    ConventionalMagazine(length=8, clipRatio=4, useEjectors=True, maxFillRate=maxFillRate),
 
     BeltfedMagazine(length=1, clipRatio=1, useEjectors=False),
     ConventionalMagazine(length=8, clipRatio=0, useEjectors=False),
-    ConventionalMagazine(length=8, clipRatio=2, useEjectors=False),
-    ConventionalMagazine(length=8, clipRatio=4, useEjectors=False),
+    ConventionalMagazine(length=8, clipRatio=2, useEjectors=False, maxFillRate=maxFillRate),
+    ConventionalMagazine(length=8, clipRatio=4, useEjectors=False, maxFillRate=maxFillRate),
     ]
 
 costType = 'rp'
-extraCostFunction = lambda fireRate: 20000.0 - 760.0 * math.log(fireRate * 0.25, 0.92)
+loadToCoolingRatio = 1.6
+propellantFraction = 3 / 6
+barrelCount = 1
+extraCostFunction = lambda fireRate: 15000.0 + max(
+    760.0 * -math.log(fireRate * loadToCoolingRatio * propellantFraction**0.5 / barrelCount, 0.92), 0.0)
 
 for magazine in magazinesToConsider:
-    magazine.printOptimal(costType, extraCostFunction, 'u')
+    magazine.printOptimal(costType, extraCostFunction, 'u', maxCost = 100000)
     print()

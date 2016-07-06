@@ -3,20 +3,22 @@ import math
 minGauge = 0.2
 maxGauge = 2.0
 
+fuseCount = 2
+
 costs = {
-    'base': 10000,
-    'gauge' : 200,
-    'barrel' : 200,
-    'ammo' : 300,
-    'pellet' : 420,
+    'base': 2000,
+    'gauge' : 210,
+    'barrel' : 85 + 65 * 2,
+    'ammo' : 105,
+    'pellet' : 1480,
     'autoloader' : 190,
     'connector' : 450,
     }
 
-autoloaderFacesPerAmmo = 2
-autoloaderFacesPerPellet = 2.5
-autoloadersPerPellet = 1
-connectorsPerPellet = 0.25
+autoloaderFacesPerAmmo = 3
+autoloaderFacesPerPellet = 3
+autoloadersPerPellet = 3
+connectorsPerPellet = 1
 
 costs['pellet'] += autoloadersPerPellet * costs['autoloader'] + connectorsPerPellet * costs['connector']
 
@@ -47,7 +49,7 @@ def computeAmmoUse(cram):
 
 def computeReloadTime(cram):
     base = computeLowRelativeVolume(cram)
-    return base * (1 + 1 / math.sqrt(0.1 * (1 + 2 * cram["ammo"] * autoloaderFacesPerAmmo)))
+    return base * (1 + 1 / math.sqrt(0.1 * (1 + cram["ammo"] * autoloaderFacesPerAmmo)))
 
 def computePelletsPerSecond(cram):
     return 0.1 * cram["pellet"] * (0.5 + autoloaderFacesPerPellet)
@@ -57,7 +59,7 @@ def computePelletsPerShot(cram):
 
 def computeDensity(cram):
     pellets = computePelletsPerShot(cram)
-    density = pellets / computeHighRelativeVolume(cram)
+    density = pellets / (computeHighRelativeVolume(cram) - 0.25 * fuseCount)
     return density
 
 def computeEffectivePelletsPerShot(cram):
@@ -68,7 +70,8 @@ def computeEffectivePelletsPerShot(cram):
 
 def computeShotPower(cram):
     power = computeEffectivePelletsPerShot(cram)
-    power = power * power
+    # power = min(power, 6.0)
+    # power = power * power
     # power = 0.1 * power + 0.9 * max(0, power - 40)
     return power
 
@@ -100,8 +103,10 @@ def statString(cram):
     return result
 
 
+
+
 initial = {
-    'gauge' : 0,
+    'gauge' : fuseCount,
     'barrel' : 1,
     'ammo' : 8,
     'pellet' : 0,

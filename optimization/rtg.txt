@@ -1,0 +1,139 @@
+Since railguns and particle cannons draw directly from battery energy, the required battery capacity is determined by the weapon itself, and 
+
+[b]RTG[/b]
+
+[list]
+[*]Cost 250 scrap and 500 crystal per cubic metre (6000 RP).
+[*]Largest size is 27 cubic metres.
+[*]Produces 25 battery energy per second per cubic metre.
+[/list]
+
+[b]Battery[/b]
+
+[list]
+[*]Costs 20 natural, 10 metal, and 10 scrap per cubic metre (80 RP).
+[*]Largest size is 9 cubic metres.
+[*]Maximum power production per cubic metre is equal to 50 times the "throttle" a times the charge fraction.
+[*]Consumes 0.8 * (1 + a^2) battery energy per second per power produced.
+[/list]
+
+[b]Throttle vs. battery ratio[/b]
+
+Suppose we want to support a maximum power output of M times the sustainable output (for at least 1 second). This means the maximum battery consumption per cubic metre of RTG is
+
+40 a b (1 + a^2) = 25M
+
+Solving for b, we have
+
+b = 0.625 M / (a (1 + a^2))
+
+The net sustainable power output is
+
+31.25 / (1 + a^2)
+
+[b]Optimal battery ratio[/b]
+
+Suppose a cubic metre of RTG costs c times as much as a cubic metre of battery. We want to optimize the ratio of the power output to the cost:
+
+maximize 31.25 / (1 + a^2) / (1 + b/c)
+minimize (1 + a^2) (1 + 0.625 M / (ac (1 + a^2)))
+minimize 1 + a^2 + 0.625 M / ac
+2a = 0.625 M / ca^2
+
+a = (0.3125M / c)^(1/3)
+
+Some example values, assuming a 25% headroom (M = 1.25):
+
+[code]
+Optimal block count   (c = 1/3):  a = 1.00, b = 0.39
+Optimal volume        (c = 1):    a = 0.70, b = 0.70
+Optimal metal + scrap (c = 12.5): a = 0.31, b = 2.30
+Optimal RP            (c = 75):   a = 0.17, b = 4.47
+[/code]
+
+Note that the throttle a can only be set in increments of 1%, and not above 100%. This is reflected in the values above, and the battery ratios b above are computed from the settable throttle values a.
+
+----
+
+Since railguns and particle cannons draw directly from battery energy, the required battery capacity is largely determined by the weapon itself, and there is no throttle to worry about. The question then becomes what overclock to set.
+
+[b]RTG[/b]
+
+[list]
+[*]Costs 250 scrap and 500 crystal per cubic metre (6000 RP).
+[*]Largest size is 27 cubic metres.
+[*]Produces 25 battery energy per second per cubic metre.
+[/list]
+
+[b]Railgun Charger[/b]
+
+[list]
+[*]Costs 20 natural, 10 metal, 100 oil, 200 scrap, 20 crystal (1340 RP).
+[*]Only comes in 1 cubic metre size.
+[*]Default draw rate of 100 battery energy per second.
+[/list]
+
+[b]Particle Tube[/b]
+
+[list]
+[*]Costs 100 metal, 50 scrap (400 RP).
+[*]Only comes in 1 cubic metre size.
+[*]Default draw rate of 20 battery energy per second.
+[/list]
+
+[b]Analysis[/b]
+
+Conveniently, both overclocks work the same: multiply the output by o in exchange for o^2 as much battery consumption. Suppose at o = 1 the RTGs needed to power a weapon block cost c times as much as the weapon block. By changing o, the relative output is scaled by o. The total cost is proportional to 1 + c o^2. We want to maximize the ratio of output to the total cost:
+
+maximize o / (1 + c o^2)
+o * 2co = 1 + c o^2
+co^2 = 1
+o = sqrt(1 / c)
+
+Example values for railguns:
+
+[code]
+Optimal block count   (c = 0.148): o = 2.60
+Optimal volume        (c = 4):     o = 0.50
+Optimal metal + scrap (c = 4.76):  o = 0.46
+Optimal RP            (c = 17.9):  o = 0.24  
+[/code]
+
+Example values for particle cannons:
+
+[code]
+Optimal block count   (c = 0.0296): o = 5.81
+Optimal volume        (c = 0.8):    o = 1.12
+Optimal metal + scrap (c = 1.33):   o = 0.86
+Optimal RP            (c = 12):     o = 0.29
+[/code]
+
+[b][size=large]Optimal unsustained battery storage[/size][/b]
+
+How much electric engine throttle a should you use if you want to support a power draw P for an amount of time T with unsustained batteries, and how many batteries will you need?
+
+The effective storage per battery is 1250 / (1 + a^2). To support the power draw, you will need a reserve of P / 50a full, unused batteries. We want to minimize the total number of batteries:
+
+minimize PT (1 + a^2) / 1250 + P / 50a
+PTa / 625 = P / 50a^2
+a = (12.5 / T)^(1/3)
+
+For carmenara's example of 3000 power for 600 seconds, we have a = 0.27 or 0.28, requiring 1768 cubic metres of batteries (ouch!) That's:
+
+[list]
+[*]15.27 power per block
+[*]1.70 power per volume
+[*]84.84 power per k(scrap + metal)
+[*]21.21 power per kRP
+[/list]
+
+In comparison, optimal sustained RTG power can achieve:
+
+[list]
+[*]183.26 power per block
+[*]11.49 power per volume
+[*]94.74 power per k(scrap + metal)
+[*]4.75 power per kRP
+[/list]
+
+So if your metric is RP, you can get by with about a quarter of the cost by using unsustained batteries. But if metal/scrap is your constraint, you're better off relying on sustained RTG output by the five-minute mark. And by block or by volume, building for sustained output is far better, unless perhaps you're building a sub-minute cruise missile.
