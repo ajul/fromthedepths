@@ -41,6 +41,26 @@ componentCosts = {
         'feeder' : 30,
         'ejector' : 130,
         },
+    'vol' : {
+        'autoloader' : {
+            1 : 1,
+            2 : 2,
+            3 : 3,
+            4 : 4,
+            6 : 6,
+            8 : 8,
+            },
+        'clip' : {
+            1 : 1,
+            2 : 2,
+            3 : 3,
+            4 : 4,
+            6 : 6,
+            8 : 8,
+            },
+        'feeder' : 1,
+        'ejector' : 2,
+        },
     }
 
 scaleLetters = {
@@ -196,9 +216,14 @@ magazinesToConsider = [
 costType = 'rp'
 loadToCoolingRatio = 1.6
 propellantFraction = 3 / 6
-barrelCount = 1
-extraCostFunction = lambda fireRate: 15000.0 + max(
-    760.0 * -math.log(fireRate * loadToCoolingRatio * propellantFraction**0.5 / barrelCount, 0.92), 0.0)
+barrelCount = 6
+baseCost = 20000
+coolerCost = 570
+#baseCost = 20
+#coolerCost = 1
+extraCostFunction = lambda fireRate: baseCost + max(
+    coolerCost * -math.log(fireRate * loadToCoolingRatio * propellantFraction**0.5 / barrelCount, 0.92), 0.0)
+
 
 for magazine in magazinesToConsider:
     magazine.printOptimal(costType, extraCostFunction, 'u', maxCost = 100000)
