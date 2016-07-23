@@ -6,13 +6,13 @@ maxGauge = 2.0
 fuseCount = 2
 
 costs = {
-    'base': 2000,
-    'gauge' : 210,
-    'barrel' : 85 + 65 * 2,
-    'ammo' : 105,
-    'pellet' : 1480,
-    'autoloader' : 190,
-    'connector' : 450,
+    'base': 100,
+    'gauge' : 35,
+    'barrel' : 20,
+    'ammo' : 20,
+    'pellet' : 100,
+    'autoloader' : 35,
+    'connector' : 15,
     }
 
 autoloaderFacesPerAmmo = 3

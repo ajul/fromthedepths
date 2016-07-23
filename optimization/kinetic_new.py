@@ -86,9 +86,6 @@ class KineticCartridge():
     def moduleCount(self):
         return self.shellModuleCount() + self.propellants
 
-    def hasEvenModuleCount(self):
-        return self.moduleCount() % 2 == 0
-
     def shellVolume(self):
         return self.shellLength() * 0.25 * math.pi * self.gauge**2.0
 
@@ -162,7 +159,6 @@ def bodyPropellantIterator(gauge, head, base, maxShellModuleCount, scoreFunction
                 if cartridge.length() > 8.0: break
                 if cartridge.shellModuleCount() > maxShellModuleCount: break
                 if propellants > cartridge.shellModuleCount() * 4.0: break
-                if not cartridge.hasEvenModuleCount(): continue
                 
                 yield cartridge
 
@@ -181,7 +177,7 @@ standardBases = [
     [MODULES['base_bleeder']],
     ]
 
-scoreFunction = makeScoreFunction(speedPower = 1.0, armour = 18.0)
+scoreFunction = makeScoreFunction(speedPower = 1.0, armour = 10.0)
 
 for gauge in [0.15]:
     for head in standardHeads:

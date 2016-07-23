@@ -1,8 +1,30 @@
 import math
 
 componentCosts = {
+    'mat' : {
+        'autoloader' : {
+            'belt' : 40,
+            1 : 20,
+            2 : 40,
+            3 : 60,
+            4 : 80,
+            6 : 120,
+            8 : 160,
+            },
+        'clip' : {
+            1 : 5,
+            2 : 10,
+            3 : 15,
+            4 : 20,
+            6 : 30,
+            8 : 40,
+            },
+        'feeder' : 15,
+        'ejector' : 50,
+        },
     'rp' : {
         'autoloader' : {
+            'belt' : 680,
             1 : 680,
             2 : 860,
             3 : 955,
@@ -23,6 +45,7 @@ componentCosts = {
         },
     'ms' : {
         'autoloader' : {
+            'belt' : 170,
             1 : 170,
             2 : 210,
             3 : 230,
@@ -43,6 +66,7 @@ componentCosts = {
         },
     'vol' : {
         'autoloader' : {
+            'belt' : 1,
             1 : 1,
             2 : 2,
             3 : 3,
@@ -172,6 +196,14 @@ class ConventionalMagazine(Magazine):
         return 'Conventional autoloaders: ' + self.attachmentString()
 
 class BeltfedMagazine(ConventionalMagazine):
+    def costPerAutoloader(self, costType, feederRatio):
+        return (
+            componentCosts[costType]['autoloader']['belt'] +
+            componentCosts[costType]['clip'][self.length] * self.clipRatio +
+            componentCosts[costType]['feeder'] * feederRatio +
+            componentCosts[costType]['ejector'] * self.useEjectors
+            )
+    
     def loadRate(self, **kwargs):
         return 5.0 * ConventionalMagazine.loadRate(self, **kwargs)
 
@@ -208,17 +240,23 @@ magazinesToConsider = [
     ConventionalMagazine(length=8, clipRatio=4, useEjectors=True, maxFillRate=maxFillRate),
 
     BeltfedMagazine(length=1, clipRatio=1, useEjectors=False),
+    ConventionalMagazine(length=1, clipRatio=0, useEjectors=False),
+    ConventionalMagazine(length=1, clipRatio=2, useEjectors=False),
+    ConventionalMagazine(length=1, clipRatio=4, useEjectors=False),
+    ConventionalMagazine(length=2, clipRatio=0, useEjectors=False),
+    ConventionalMagazine(length=2, clipRatio=2, useEjectors=False),
+    ConventionalMagazine(length=2, clipRatio=4, useEjectors=False),
     ConventionalMagazine(length=8, clipRatio=0, useEjectors=False),
     ConventionalMagazine(length=8, clipRatio=2, useEjectors=False, maxFillRate=maxFillRate),
     ConventionalMagazine(length=8, clipRatio=4, useEjectors=False, maxFillRate=maxFillRate),
     ]
 
-costType = 'rp'
+costType = 'mat'
 loadToCoolingRatio = 1.6
 propellantFraction = 3 / 6
 barrelCount = 6
-baseCost = 20000
-coolerCost = 570
+baseCost = 500
+coolerCost = 20
 #baseCost = 20
 #coolerCost = 1
 extraCostFunction = lambda fireRate: baseCost + max(
