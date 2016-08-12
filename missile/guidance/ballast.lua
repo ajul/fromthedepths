@@ -2,6 +2,7 @@ maxTargetHeight = 2
 
 maxRunningHeight = -6
 
+ballastUpdatePeriod = 40 --frames
 ballastTime = 2.0
 ballastWidth = 0.05
 
@@ -27,7 +28,7 @@ function Update(Iarg)
     for transceiverIndex = 0, I:GetLuaTransceiverCount() - 1 do
         for missileIndex = 0, I:GetLuaControlledMissileCount(transceiverIndex) - 1 do
             local missile = I:GetLuaControlledMissileInfo(transceiverIndex, missileIndex)
-            local missileParts = I:GetMissileInfo(transceiverIndex, missileIndex) -- EXPENSIVE!!!
+            
 
             local target = SelectTarget(missile)
             
@@ -48,9 +49,12 @@ function Update(Iarg)
             local relativeHeight =  y - missile.Position.y
             local buoyancy = (relativeHeight - missile.Velocity.y * ballastTime) / ballastWidth
             
-            for k, v in pairs(missileParts.Parts) do
-                if string.find(v.Name, 'ballast') then
-                    v:SendRegister(2, buoyancy)
+            if (tick + missile.Id) % ballastUpdatePeriod == 0 then
+                local missileParts = I:GetMissileInfo(transceiverIndex, missileIndex) -- EXPENSIVE!!!
+                for k, v in pairs(missileParts.Parts) do
+                    if string.find(v.Name, 'ballast') then
+                        v:SendRegister(2, buoyancy)
+                    end
                 end
             end
             
