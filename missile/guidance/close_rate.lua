@@ -141,7 +141,7 @@ function Update(Iarg)
                     if closeTime <= 0 then
                         newThrottle = 0
                     else
-                        newThrottle = (missileData.fuel - missileData.reserveFuel) / closeTime
+                        newThrottle = (missileData.fuel - missileData.reserveFuel) / math.max(closeTime, throttleUpdatePeriod)
                     end
                     newThrottle = math.max(newThrottle, missileData.defaultThrottle)
                     
