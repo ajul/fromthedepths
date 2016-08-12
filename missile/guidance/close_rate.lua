@@ -1,26 +1,27 @@
 targetingMainframe = 0
 velocityPredictTime = 10
 
-detonationLookaheadTime = 0.25
-detonationRadius = 5
+minAltitude = 3
+throttleUpdatePeriod = 0.5 -- how often to update throttle in ticks
+reserveFuelFraction = 0.1
+cullDelay = 1.0 -- time to wait after fuel expended before culling
 
-tick = 0
-cleanupPeriod = 40
-
-missileCullTime = 5
-missileCullVelocity = 40
+gameTime = 0
+lastCleanup = 0
+cleanupPeriod = 1.0
 
 numberOfTargets = 0
 targetsByIndex = {}
 targetsById = {}
 
-missileTargets = {}
-missileTicks = {}
+missileDatas = {}
+
+I = nil
 
 function InterceptTime(missile, target)
-    relativePosition = target.Position - missile.Position
-    relativeVelocity = target.Velocity - missile.Velocity
-    closeRate = -Vector3.Dot(relativeVelocity, relativePosition.normalized)
+    local relativePosition = target.Position - missile.Position
+    local relativeVelocity = target.Velocity - missile.Velocity
+    local closeRate = -Vector3.Dot(relativeVelocity, relativePosition.normalized)
     if closeRate <= 0 then
         return 0
     else
@@ -28,21 +29,21 @@ function InterceptTime(missile, target)
     end
 end
 
-function LeadPosition(missile, target)
-    t = InterceptTime(missile, target)
-    result = target.Position
-    if not t then
-        return result
+function ComputeLead(missile, target)
+    local closeTime = InterceptTime(missile, target)
+    local result = target.AimPointPosition
+    if not closeTime then
+        return result, closeTime
     end
     
-    if t < velocityPredictTime then
-        result = result + target.Velocity * t
+    if closeTime < velocityPredictTime then
+        result = result + target.Velocity * closeTime
     end
     
-    return result
+    return result, closeTime
 end
 
-function UpdateTargets(I)
+function UpdateTargets()
     targetsByIndex = {}
     targetsById = {}
     numberOfTargets = I:GetNumberOfTargets(targetingMainframe)
@@ -55,52 +56,116 @@ function UpdateTargets(I)
 end
 
 function SelectTarget(I, missile)
-    local target = targetsById[missileTargets[missile.Id]]
+    local target = targetsById[missileDatas[missile.Id].target]
     if target then
         return target
     end
     target = targetsByIndex[missile.Id % numberOfTargets] 
-    missileTargets[missile.Id] = target
+    missileDatas[missile.Id].target = target
     return target
 end
 
+function SetNewThrottle(transceiverIndex, missileIndex, missileData, newThrottle)
+    if missileData.fuel > 0 then
+        local missileParts = I:GetMissileInfo(transceiverIndex, missileIndex)
+        
+        missileData.fuel = missileData.fuel - missileData.throttle * (gameTime - missileData.lastThrottleUpdate)
+        
+        for k, v in pairs(missileParts.Parts) do
+            if string.find(v.Name, 'variable') then
+                v:SendRegister(2, newThrottle)
+                break
+            end
+        end
+        
+        missileData.throttle = newThrottle
+        missileData.lastThrottleUpdate = gameTime
+    elseif gameTime >= missileData.lastThrottleUpdate + cullDelay then
+        I:DetonateLuaControlledMissile(transceiverIndex, missileIndex)
+    end
+end
+
 function Cleanup()
-    for k, v in pairs(missileTicks) do
-        if v ~= tick then
-            missileTargets[k] = nil
-            missileTicks[k] = nil
+    for k, v in pairs(missileDatas) do
+        if v.gameTime ~= gameTime then
+            missileDatas[k] = nil
         end
     end
 end
 
-function Update(I)
-    tick = tick + 1
+function Update(Iarg)
+    I = Iarg
+    gameTime = I:GetGameTime()
     
-    UpdateTargets(I)
+    UpdateTargets()
     
     for transceiverIndex = 0, I:GetLuaTransceiverCount() - 1 do
         for missileIndex = 0, I:GetLuaControlledMissileCount(transceiverIndex) - 1 do
-            missile = I:GetLuaControlledMissileInfo(transceiverIndex, missileIndex)
-            if missile.TimeSinceLaunch > missileCullTime and (missile.Velocity.magnitude < missileCullVelocity) then
-                I:DetonateLuaControlledMissile(transceiverIndex, missileIndex)
-            else
-                target = SelectTarget(I, missile)
-                if target and target.Valid then
-                    if Vector3.Distance(missile.Position + missile.Velocity * detonationLookaheadTime, target.AimPointPosition + target.Velocity * detonationLookaheadTime) < detonationRadius then
-                        I:DetonateLuaControlledMissile(transceiverIndex, missileIndex)
+            local missile = I:GetLuaControlledMissileInfo(transceiverIndex, missileIndex)
+            
+            -- Initialization.
+            if missileDatas[missile.Id] == nil then
+                local fuel = 0
+                local initialThrottle = 0
+                local missileParts = I:GetMissileInfo(transceiverIndex, missileIndex) -- EXPENSIVE!!!
+                for k, v in pairs(missileParts.Parts) do
+                    if string.find(v.Name, 'fuel') then
+                        fuel = fuel + 5000
+                    elseif string.find(v.Name, 'variable') then
+                        initialThrottle = initialThrottle + v.Registers[2]
                     end
-                    leadPosition = LeadPosition(missile, target)
-                    I:SetLuaControlledMissileAimPoint(transceiverIndex, missileIndex, leadPosition.x, leadPosition.y, leadPosition.z)
-                else
-                    I:SetLuaControlledMissileAimPoint(transceiverIndex, missileIndex, missile.Position.x, 1000 * missile.Position.y, missile.Position.z)
                 end
                 
-                missileTicks[missile.Id] = tick
+                missileDatas[missile.Id] = {
+                    fuel = fuel,
+                    reserveFuel = fuel * reserveFuelFraction,
+                    throttle = initialThrottle,
+                    defaultThrottle = initialThrottle,
+                    lastThrottleUpdate = gameTime,
+                }
             end
+
+            local target = SelectTarget(I, missile)
+            
+            local missileData = missileDatas[missile.Id]
+            
+            if target and target.Valid then
+                local leadPosition, closeTime = ComputeLead(missile, target)
+                
+                I:SetLuaControlledMissileAimPoint(transceiverIndex, missileIndex, 
+                                                  leadPosition.x, math.max(leadPosition.y, minAltitude), leadPosition.z)
+                
+                if gameTime >= missileData.lastThrottleUpdate + throttleUpdatePeriod then
+
+                    local newThrottle
+                    if closeTime <= 0 then
+                        newThrottle = 0
+                    else
+                        newThrottle = (missileData.fuel - missileData.reserveFuel) / closeTime
+                    end
+                    newThrottle = math.max(newThrottle, missileData.defaultThrottle)
+                    
+                    SetNewThrottle(transceiverIndex, missileIndex, missileData, newThrottle)
+                end
+            else
+                -- No target found.
+                I:SetLuaControlledMissileAimPoint(transceiverIndex, missileIndex, missile.Position.x, 1000 * missile.Position.y, missile.Position.z)
+                
+                if gameTime >= missileData.lastThrottleUpdate + throttleUpdatePeriod then
+                    SetNewThrottle(transceiverIndex, missileIndex, missileData, 50)
+                end
+            end
+            
+            missileData.gameTime = gameTime
         end
     end
     
-    if tick % cleanupPeriod == 0 then
+    if gameTime >= lastCleanup + cleanupPeriod then
         Cleanup()
     end
+end
+
+function LogBoth(s)
+    I:Log(s)
+    I:LogToHud(s)
 end
