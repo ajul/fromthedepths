@@ -118,7 +118,7 @@ function Update(Iarg)
                 
                 missileDatas[missile.Id] = {
                     fuel = fuel,
-                    reserveFuel = fuel * reserveFuelFraction,
+                    -- reserveFuel = fuel * reserveFuelFraction,
                     throttle = initialThrottle,
                     defaultThrottle = initialThrottle,
                     lastThrottleUpdate = gameTime,
@@ -141,7 +141,7 @@ function Update(Iarg)
                     if closeTime <= 0 then
                         newThrottle = 0
                     else
-                        newThrottle = (missileData.fuel - missileData.reserveFuel) / math.max(closeTime, throttleUpdatePeriod)
+                        newThrottle = (1.0 - reserveFuelFraction) * missileData.fuel / math.max(closeTime, throttleUpdatePeriod)
                     end
                     newThrottle = math.max(newThrottle, missileData.defaultThrottle)
                     
